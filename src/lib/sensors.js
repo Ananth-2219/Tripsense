@@ -67,6 +67,8 @@ export async function releaseWakeLock() {
  * Start one recording session, replacing any previous session. Request sensor
  * permissions first. Unsupported data sources are skipped.
  * Motion readings: { type: 'motion', timestamp, x, y, z } (m/s²).
+ * Also includes rotationAlpha, rotationBeta, rotationGamma (degrees/sec around
+ * the phone's z, x, y axes respectively); unavailable values default to null.
  * Location readings: { type: 'location', timestamp, lat, lon } (degrees).
  * Timestamps are Unix milliseconds; motion uses receipt time, location uses
  * the position's timestamp. Missing motion axes remain null.
@@ -97,14 +99,20 @@ export function startRecording(onReading) {
     if (!acceleration || [acceleration.x, acceleration.y, acceleration.z].every((axis) => axis == null)) {
       acceleration = event.accelerationIncludingGravity
     }
-    if (!acceleration || [acceleration.x, acceleration.y, acceleration.z].every((axis) => axis == null)) return
+    const motion = {
+      x: acceleration?.x ?? null,
+      y: acceleration?.y ?? null,
+      z: acceleration?.z ?? null,
+      rotationAlpha: event.rotationRate?.alpha ?? null,
+      rotationBeta: event.rotationRate?.beta ?? null,
+      rotationGamma: event.rotationRate?.gamma ?? null,
+    }
+    if (Object.values(motion).every((value) => value === null)) return
 
     onReading({
       type: 'motion',
       timestamp: Date.now(),
-      x: acceleration.x ?? null,
-      y: acceleration.y ?? null,
-      z: acceleration.z ?? null,
+      ...motion,
     })
   }
 

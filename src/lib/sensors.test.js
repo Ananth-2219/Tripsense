@@ -28,9 +28,9 @@ function recordingBrowser(t, { location = true, throws = false } = {}) {
   t.after(stopRecording)
   return {
     target, watches, cleared,
-    motion(acceleration, accelerationIncludingGravity = null) {
+    motion(acceleration, accelerationIncludingGravity = null, rotationRate = null) {
       const event = new Event('devicemotion')
-      Object.assign(event, { acceleration, accelerationIncludingGravity })
+      Object.assign(event, { acceleration, accelerationIncludingGravity, rotationRate })
       target.dispatchEvent(event)
     },
   }
@@ -181,12 +181,51 @@ test('recording emits motion, gravity fallback, and timestamped location reading
   browser.motion(null)
   browser.watches[0].success({ timestamp: 1700000000123, coords: { latitude: 12, longitude: 77 } })
   assert.deepEqual(readings, [
-    { type: 'motion', timestamp: 1700000000000, x: 0, y: -2, z: 3 },
-    { type: 'motion', timestamp: 1700000000000, x: 1, y: 2, z: 9.8 },
-    { type: 'motion', timestamp: 1700000000000, x: 4, y: 5, z: 6 },
+    { type: 'motion', timestamp: 1700000000000, x: 0, y: -2, z: 3, rotationAlpha: null, rotationBeta: null, rotationGamma: null },
+    { type: 'motion', timestamp: 1700000000000, x: 1, y: 2, z: 9.8, rotationAlpha: null, rotationBeta: null, rotationGamma: null },
+    { type: 'motion', timestamp: 1700000000000, x: 4, y: 5, z: 6, rotationAlpha: null, rotationBeta: null, rotationGamma: null },
     { type: 'location', timestamp: 1700000000123, lat: 12, lon: 77 },
   ])
   assert.equal(browser.watches[0].options.enableHighAccuracy, true)
+})
+
+test('motion includes rotation rates alongside gravity fallback acceleration', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  t.mock.method(Date, 'now', () => 123)
+  startRecording((reading) => readings.push(reading))
+  browser.motion(null, { x: 1, y: 2, z: 9.8 }, { alpha: 0, beta: -12, gamma: 3.5 })
+  assert.deepEqual(readings, [{
+    type: 'motion', timestamp: 123, x: 1, y: 2, z: 9.8,
+    rotationAlpha: 0, rotationBeta: -12, rotationGamma: 3.5,
+  }])
+})
+
+for (const [axis, field] of [['alpha', 'rotationAlpha'], ['beta', 'rotationBeta'], ['gamma', 'rotationGamma']]) {
+  test(`rotation-only readings retain a zero ${axis} value`, (t) => {
+    const browser = recordingBrowser(t)
+    const readings = []
+    t.mock.method(Date, 'now', () => 123)
+    startRecording((reading) => readings.push(reading))
+    browser.motion(null, null, { [axis]: 0 })
+    browser.motion({ x: null, y: null, z: null }, null, { [axis]: 0 })
+    const expected = {
+      type: 'motion', timestamp: 123, x: null, y: null, z: null,
+      rotationAlpha: null, rotationBeta: null, rotationGamma: null,
+      [field]: 0,
+    }
+    assert.deepEqual(readings, [expected, expected])
+  })
+}
+
+test('motion with neither acceleration nor rotation data is skipped', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  browser.motion(null)
+  browser.motion(undefined, undefined, {})
+  browser.motion({ x: null, y: null, z: null }, null, { alpha: null, beta: null, gamma: null })
+  assert.deepEqual(readings, [])
 })
 
 test('stop removes exact motion listener, clears watch ID zero, and ignores queued callbacks', (t) => {
