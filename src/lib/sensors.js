@@ -1,6 +1,67 @@
 /** @typedef {'granted' | 'denied' | 'unsupported'} PermissionStatus */
 
 let activeRecording = null
+let wakeLock = null
+let pendingWakeLock = null
+let wakeLockWanted = false
+
+async function releaseSentinel(sentinel) {
+  if (!sentinel || sentinel.released) return
+  try {
+    await sentinel.release()
+  } catch (error) {
+    console.info('Unable to release screen wake lock:', error)
+  }
+}
+
+/** Request a screen wake lock. Returns the sentinel, or null if unavailable. */
+export async function requestWakeLock() {
+  wakeLockWanted = true
+  const browser = typeof window === 'undefined' ? undefined : window
+  const api = browser?.navigator?.wakeLock
+  if (typeof api?.request !== 'function') {
+    console.info('Screen Wake Lock API is unsupported; continuing without a wake lock.')
+    return null
+  }
+  if (browser.document?.visibilityState === 'hidden') return null
+  if (wakeLock && !wakeLock.released) return wakeLock
+  if (pendingWakeLock) return pendingWakeLock.promise
+
+  // A unique request token prevents a late result from surviving stop/restart.
+  const request = { promise: null }
+  pendingWakeLock = request
+  request.promise = Promise.resolve().then(async () => {
+    if (pendingWakeLock !== request) return null
+    try {
+      const sentinel = await api.request('screen')
+      if (pendingWakeLock !== request || !wakeLockWanted) {
+        await releaseSentinel(sentinel)
+        return null
+      }
+      wakeLock = sentinel
+      sentinel.addEventListener('release', () => {
+        if (wakeLock === sentinel) wakeLock = null
+      }, { once: true })
+      return sentinel
+    } catch (error) {
+      console.info('Unable to acquire screen wake lock; continuing recording:', error)
+      return null
+    } finally {
+      if (pendingWakeLock === request) pendingWakeLock = null
+    }
+  })
+  return request.promise
+}
+
+/** Release the lock and cancel pending acquisition. Safe to call repeatedly. */
+export async function releaseWakeLock() {
+  wakeLockWanted = false
+  const pending = pendingWakeLock
+  const sentinel = wakeLock
+  pendingWakeLock = null
+  wakeLock = null
+  await Promise.all([releaseSentinel(sentinel), pending?.promise])
+}
 
 /**
  * Start one recording session, replacing any previous session. Request sensor
@@ -24,6 +85,8 @@ export function startRecording(onReading) {
     geolocation: window.navigator?.geolocation,
     motionListener: null,
     watchId: null,
+    document: window.document,
+    visibilityListener: null,
   }
   activeRecording = session
 
@@ -63,17 +126,26 @@ export function startRecording(onReading) {
         { enableHighAccuracy: true, maximumAge: 0 },
       )
     }
+    session.visibilityListener = () => {
+      if (activeRecording === session && wakeLockWanted && session.document.visibilityState === 'visible') {
+        void requestWakeLock()
+      }
+    }
+    session.document?.addEventListener('visibilitychange', session.visibilityListener)
+    void requestWakeLock()
   } catch (error) {
     stopRecording()
     throw error
   }
 }
 
-/** Remove the motion listener and location watch. Safe to call repeatedly. */
+/** Remove listeners, clear the location watch, and release the screen lock. */
 export function stopRecording() {
   const session = activeRecording
+  void releaseWakeLock()
   if (!session) return
   activeRecording = null
+  session.document?.removeEventListener('visibilitychange', session.visibilityListener)
 
   try {
     session.target.removeEventListener('devicemotion', session.motionListener)

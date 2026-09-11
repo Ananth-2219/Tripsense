@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { requestGeolocationPermission, requestMotionPermission, startRecording, stopRecording } from './sensors.js'
+import { requestGeolocationPermission, requestMotionPermission, startRecording, stopRecording, requestWakeLock, releaseWakeLock } from './sensors.js'
+import { setImmediate } from 'node:timers/promises'
 
 function setWindow(t, value) {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'window')
@@ -34,6 +35,140 @@ function recordingBrowser(t, { location = true, throws = false } = {}) {
     },
   }
 }
+
+function wakeLockBrowser(t) {
+  const browser = recordingBrowser(t)
+  const document = new EventTarget()
+  document.visibilityState = 'visible'
+  browser.target.document = document
+  const sentinels = []
+  browser.target.navigator.wakeLock = {
+    async request(type) {
+      assert.equal(type, 'screen')
+      const sentinel = new EventTarget()
+      sentinel.released = false
+      sentinel.releaseCalls = 0
+      sentinel.release = async () => {
+        sentinel.releaseCalls++
+        sentinel.released = true
+        sentinel.dispatchEvent(new Event('release'))
+      }
+      sentinels.push(sentinel)
+      return sentinel
+    },
+  }
+  return { ...browser, document, sentinels }
+}
+
+test('wake lock requests share one sentinel and release is idempotent', async (t) => {
+  const browser = wakeLockBrowser(t)
+  const [first, second] = await Promise.all([requestWakeLock(), requestWakeLock()])
+  assert.equal(first, second)
+  assert.equal(await requestWakeLock(), first)
+  assert.equal(browser.sentinels.length, 1)
+  await releaseWakeLock()
+  await releaseWakeLock()
+  assert.equal(first.releaseCalls, 1)
+})
+
+test('recording reacquires after visibility returns and removes listener on stop', async (t) => {
+  const browser = wakeLockBrowser(t)
+  const removed = t.mock.method(browser.document, 'removeEventListener')
+  const added = t.mock.method(browser.document, 'addEventListener')
+  startRecording(() => {})
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 1)
+  browser.document.visibilityState = 'hidden'
+  await browser.sentinels[0].release()
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 1)
+  browser.document.visibilityState = 'visible'
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 2)
+  stopRecording()
+  assert.deepEqual(removed.mock.calls[0].arguments, added.mock.calls[0].arguments)
+  assert.equal(browser.sentinels[1].released, true)
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 2)
+})
+
+test('hidden recording defers acquisition and explicit release disables reacquisition', async (t) => {
+  const browser = wakeLockBrowser(t)
+  browser.document.visibilityState = 'hidden'
+  startRecording(() => {})
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 0)
+  browser.document.visibilityState = 'visible'
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 1)
+  await releaseWakeLock()
+  browser.document.dispatchEvent(new Event('visibilitychange'))
+  await setImmediate()
+  assert.equal(browser.sentinels.length, 1)
+})
+
+test('unsupported and rejected wake locks log without interrupting recording', async (t) => {
+  const browser = recordingBrowser(t)
+  const log = t.mock.method(console, 'info', () => {})
+  assert.equal(await requestWakeLock(), null)
+  browser.target.navigator.wakeLock = { request: async () => { throw new Error('Battery saver') } }
+  assert.equal(await requestWakeLock(), null)
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  await setImmediate()
+  browser.motion({ x: 1, y: 2, z: 3 })
+  assert.equal(readings.length, 1)
+  assert.ok(log.mock.callCount() >= 2)
+})
+
+test('a lock resolving after stop is immediately released', async (t) => {
+  const browser = wakeLockBrowser(t)
+  const originalRequest = browser.target.navigator.wakeLock.request
+  let resolveRequest
+  browser.target.navigator.wakeLock.request = () => new Promise((resolve) => { resolveRequest = resolve })
+  startRecording(() => {})
+  await setImmediate()
+  stopRecording()
+  const sentinel = await originalRequest('screen')
+  resolveRequest(sentinel)
+  await setImmediate()
+  assert.equal(sentinel.releaseCalls, 1)
+})
+
+test('a stale request cannot replace the lock of a restarted recording', async (t) => {
+  const browser = wakeLockBrowser(t)
+  const originalRequest = browser.target.navigator.wakeLock.request
+  let resolveRequest
+  browser.target.navigator.wakeLock.request = () => new Promise((resolve) => { resolveRequest = resolve })
+  startRecording(() => {})
+  await setImmediate()
+  browser.target.navigator.wakeLock.request = originalRequest
+  startRecording(() => {})
+  await setImmediate()
+  const current = browser.sentinels[0]
+  const stale = await originalRequest('screen')
+  resolveRequest(stale)
+  await setImmediate()
+  assert.equal(stale.released, true)
+  assert.equal(current.released, false)
+  assert.equal(await requestWakeLock(), current)
+  stopRecording()
+  assert.equal(current.released, true)
+})
+
+test('wake lock release failures do not throw', async (t) => {
+  wakeLockBrowser(t)
+  const log = t.mock.method(console, 'info', () => {})
+  const sentinel = await requestWakeLock()
+  sentinel.release = async () => { throw new Error('Release failed') }
+  await assert.doesNotReject(releaseWakeLock())
+  assert.equal(log.mock.callCount(), 1)
+})
 
 test('recording emits motion, gravity fallback, and timestamped location readings', (t) => {
   const browser = recordingBrowser(t)
