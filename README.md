@@ -40,7 +40,9 @@ The PWA uses `registerType: 'autoUpdate'` and explicit registration in
 and automatically activates updates.
 
 The Recorder requests motion and location permission before starting. It buffers
-readings in memory, shows live counts, and logs totals on Stop. Each new trip
+readings in memory, shows live counts, and logs totals on Stop. After stopping,
+use **Download as JSON** to save the readings array as a formatted local JSON file.
+Each new trip
 resets the buffer; leaving the page stops recording. No data is uploaded or
 persisted in Phase 1. Screen wake lock is best effort on supported devices.
 

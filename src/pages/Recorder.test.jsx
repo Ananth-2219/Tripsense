@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react'
+import { Blob as NodeBlob } from 'node:buffer'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import Recorder from './Recorder.jsx'
@@ -29,6 +30,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 async function start() {
@@ -87,6 +89,49 @@ test('motion permission is invoked synchronously from Start and a pending start 
   await act(async () => resolveMotion('granted'))
   expect(sensors.startRecording).not.toHaveBeenCalled()
   expect(screen.getByText('Trip start cancelled.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
+})
+
+test('downloads stopped trip readings as JSON and cleans up the download URL', async () => {
+  vi.stubGlobal('Blob', NodeBlob)
+  const createObjectURL = vi.fn(() => 'blob:trip-download')
+  const revokeObjectURL = vi.fn()
+  vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+  const downloads = []
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+    downloads.push({ href: this.href, filename: this.download, attached: this.isConnected })
+  })
+  render(<Recorder />)
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
+  await start()
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
+  const readings = [
+    { type: 'motion', timestamp: 1, x: 0, y: -2, z: null },
+    { type: 'location', timestamp: 2, lat: 12, lon: 77 },
+  ]
+  act(() => readings.forEach(sensors.startRecording.mock.calls[0][0]))
+  fireEvent.click(screen.getByRole('button', { name: 'Stop trip' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Download as JSON' }))
+  const blob = createObjectURL.mock.calls[0][0]
+  expect(blob.type).toBe('application/json')
+  expect(await blob.text()).toBe(JSON.stringify(readings, null, 2))
+  expect(downloads[0]).toEqual({
+    href: 'blob:trip-download',
+    filename: expect.stringMatching(/^tripsense-[\dT-]+Z\.json$/),
+    attached: true,
+  })
+  expect(document.querySelector('a[download]')).toBeNull()
+  expect(revokeObjectURL).not.toHaveBeenCalled()
+  act(() => vi.advanceTimersByTime(1000))
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:trip-download')
+
+  // Another trip cannot export the previous trip's readings, even if empty.
+  await start()
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Stop trip' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Download as JSON' }))
+  expect(await createObjectURL.mock.calls[1][0].text()).toBe('[]')
+  act(() => vi.advanceTimersByTime(1000))
 })
 
 test('unmount cancels a pending permission request', async () => {
