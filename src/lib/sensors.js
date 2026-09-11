@@ -1,5 +1,88 @@
 /** @typedef {'granted' | 'denied' | 'unsupported'} PermissionStatus */
 
+let activeRecording = null
+
+/**
+ * Start one recording session, replacing any previous session. Request sensor
+ * permissions first. Unsupported data sources are skipped.
+ * Motion readings: { type: 'motion', timestamp, x, y, z } (m/s²).
+ * Location readings: { type: 'location', timestamp, lat, lon } (degrees).
+ * Timestamps are Unix milliseconds; motion uses receipt time, location uses
+ * the position's timestamp. Missing motion axes remain null.
+ * @param {(reading: object) => void} onReading
+ */
+export function startRecording(onReading) {
+  if (typeof onReading !== 'function') {
+    throw new TypeError('onReading must be a function')
+  }
+
+  stopRecording()
+  if (typeof window === 'undefined') return
+
+  const session = {
+    target: window,
+    geolocation: window.navigator?.geolocation,
+    motionListener: null,
+    watchId: null,
+  }
+  activeRecording = session
+
+  session.motionListener = (event) => {
+    if (activeRecording !== session) return
+
+    let acceleration = event.acceleration
+    if (!acceleration || [acceleration.x, acceleration.y, acceleration.z].every((axis) => axis == null)) {
+      acceleration = event.accelerationIncludingGravity
+    }
+    if (!acceleration || [acceleration.x, acceleration.y, acceleration.z].every((axis) => axis == null)) return
+
+    onReading({
+      type: 'motion',
+      timestamp: Date.now(),
+      x: acceleration.x ?? null,
+      y: acceleration.y ?? null,
+      z: acceleration.z ?? null,
+    })
+  }
+
+  try {
+    session.target.addEventListener('devicemotion', session.motionListener)
+    if (typeof session.geolocation?.watchPosition === 'function') {
+      session.watchId = session.geolocation.watchPosition(
+        (position) => {
+          // A callback queued before stop/restart must not emit stale readings.
+          if (activeRecording !== session) return
+          onReading({
+            type: 'location',
+            timestamp: position.timestamp,
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+          })
+        },
+        null,
+        { enableHighAccuracy: true, maximumAge: 0 },
+      )
+    }
+  } catch (error) {
+    stopRecording()
+    throw error
+  }
+}
+
+/** Remove the motion listener and location watch. Safe to call repeatedly. */
+export function stopRecording() {
+  const session = activeRecording
+  if (!session) return
+  activeRecording = null
+
+  try {
+    session.target.removeEventListener('devicemotion', session.motionListener)
+  } finally {
+    // Zero is a valid watch ID.
+    if (session.watchId !== null) session.geolocation.clearWatch(session.watchId)
+  }
+}
+
 /**
  * Call directly from a user gesture (such as a button click) on iOS.
  * Without an explicit permission API, granted means no prompt is required;

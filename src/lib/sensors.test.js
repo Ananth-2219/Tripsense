@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { requestGeolocationPermission, requestMotionPermission } from './sensors.js'
+import { requestGeolocationPermission, requestMotionPermission, startRecording, stopRecording } from './sensors.js'
 
 function setWindow(t, value) {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'window')
@@ -10,6 +10,109 @@ function setWindow(t, value) {
     else delete globalThis.window
   })
 }
+
+function recordingBrowser(t, { location = true, throws = false } = {}) {
+  const target = new EventTarget()
+  const watches = []
+  const cleared = []
+  target.navigator = location ? { geolocation: {
+    watchPosition(success, _error, options) {
+      if (throws) throw new Error('Watch failed')
+      watches.push({ success, options })
+      return watches.length - 1
+    },
+    clearWatch(id) { cleared.push(id) },
+  } } : {}
+  setWindow(t, target)
+  t.after(stopRecording)
+  return {
+    target, watches, cleared,
+    motion(acceleration, accelerationIncludingGravity = null) {
+      const event = new Event('devicemotion')
+      Object.assign(event, { acceleration, accelerationIncludingGravity })
+      target.dispatchEvent(event)
+    },
+  }
+}
+
+test('recording emits motion, gravity fallback, and timestamped location readings', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  t.mock.method(Date, 'now', () => 1700000000000)
+  startRecording((reading) => readings.push(reading))
+  browser.motion({ x: 0, y: -2, z: 3 }, { x: 9, y: 9, z: 9 })
+  browser.motion(null, { x: 1, y: 2, z: 9.8 })
+  browser.motion({ x: null, y: null, z: null }, { x: 4, y: 5, z: 6 })
+  browser.motion(null)
+  browser.watches[0].success({ timestamp: 1700000000123, coords: { latitude: 12, longitude: 77 } })
+  assert.deepEqual(readings, [
+    { type: 'motion', timestamp: 1700000000000, x: 0, y: -2, z: 3 },
+    { type: 'motion', timestamp: 1700000000000, x: 1, y: 2, z: 9.8 },
+    { type: 'motion', timestamp: 1700000000000, x: 4, y: 5, z: 6 },
+    { type: 'location', timestamp: 1700000000123, lat: 12, lon: 77 },
+  ])
+  assert.equal(browser.watches[0].options.enableHighAccuracy, true)
+})
+
+test('stop removes exact motion listener, clears watch ID zero, and ignores queued callbacks', (t) => {
+  const browser = recordingBrowser(t)
+  const added = t.mock.method(browser.target, 'addEventListener')
+  const removed = t.mock.method(browser.target, 'removeEventListener')
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  stopRecording()
+  stopRecording()
+  assert.deepEqual(removed.mock.calls[0].arguments, added.mock.calls[0].arguments)
+  assert.equal(removed.mock.callCount(), 1)
+  assert.deepEqual(browser.cleared, [0])
+  browser.motion({ x: 1, y: 2, z: 3 })
+  browser.watches[0].success({ timestamp: 123, coords: { latitude: 1, longitude: 2 } })
+  assert.deepEqual(readings, [])
+})
+
+test('restarting replaces listeners and suppresses the previous location callback', (t) => {
+  const browser = recordingBrowser(t)
+  const first = []
+  const second = []
+  startRecording((reading) => first.push(reading))
+  startRecording((reading) => second.push(reading))
+  assert.deepEqual(browser.cleared, [0])
+  browser.motion({ x: 1, y: 2, z: 3 })
+  const position = { timestamp: 123, coords: { latitude: 1, longitude: 2 } }
+  browser.watches[0].success(position)
+  browser.watches[1].success(position)
+  assert.equal(first.length, 0)
+  assert.equal(second.length, 2)
+  stopRecording()
+  assert.deepEqual(browser.cleared, [0, 1])
+})
+
+test('recording works without geolocation and preserves missing motion axes', (t) => {
+  const browser = recordingBrowser(t, { location: false })
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  browser.motion({ x: 1, y: null, z: null })
+  assert.equal(readings[0].x, 1)
+  assert.equal(readings[0].y, null)
+  assert.equal(readings[0].z, null)
+  stopRecording()
+})
+
+test('failed watch setup rolls back the motion listener', (t) => {
+  const browser = recordingBrowser(t, { throws: true })
+  const removed = t.mock.method(browser.target, 'removeEventListener')
+  assert.throws(() => startRecording(() => assert.fail('Unexpected reading')), /Watch failed/)
+  assert.equal(removed.mock.callCount(), 1)
+  browser.motion({ x: 1, y: 2, z: 3 })
+  stopRecording()
+})
+
+test('recording validates callbacks and tolerates non-browser environments', (t) => {
+  setWindow(t, undefined)
+  assert.throws(() => startRecording(null), TypeError)
+  assert.doesNotThrow(() => startRecording(() => {}))
+  assert.doesNotThrow(stopRecording)
+})
 
 test('missing browser APIs return unsupported', async (t) => {
   setWindow(t, undefined)
