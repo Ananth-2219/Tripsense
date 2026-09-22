@@ -86,6 +86,7 @@ export function startRecording(onReading) {
     target: window,
     geolocation: window.navigator?.geolocation,
     motionListener: null,
+    lastMotionTimestamp: null,
     watchId: null,
     document: window.document,
     visibilityListener: null,
@@ -108,6 +109,11 @@ export function startRecording(onReading) {
       rotationGamma: event.rotationRate?.gamma ?? null,
     }
     if (Object.values(motion).every((value) => value === null)) return
+
+    // Filter real callbacks to at most one valid reading every 100 ms.
+    const motionTimestamp = event.timeStamp
+    if (session.lastMotionTimestamp !== null && motionTimestamp - session.lastMotionTimestamp < 100) return
+    session.lastMotionTimestamp = motionTimestamp
 
     onReading({
       type: 'motion',
@@ -153,6 +159,7 @@ export function stopRecording() {
   void releaseWakeLock()
   if (!session) return
   activeRecording = null
+  session.lastMotionTimestamp = null
   session.document?.removeEventListener('visibilitychange', session.visibilityListener)
 
   try {

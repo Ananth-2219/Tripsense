@@ -16,6 +16,7 @@ function recordingBrowser(t, { location = true, throws = false } = {}) {
   const target = new EventTarget()
   const watches = []
   const cleared = []
+  let nextMotionTimestamp = 0
   target.navigator = location ? { geolocation: {
     watchPosition(success, _error, options) {
       if (throws) throw new Error('Watch failed')
@@ -28,8 +29,11 @@ function recordingBrowser(t, { location = true, throws = false } = {}) {
   t.after(stopRecording)
   return {
     target, watches, cleared,
-    motion(acceleration, accelerationIncludingGravity = null, rotationRate = null) {
+    motion(acceleration, accelerationIncludingGravity = null, rotationRate = null, timeStamp = nextMotionTimestamp) {
       const event = new Event('devicemotion')
+      // Existing data-shape tests emit callbacks 100 ms apart by default.
+      Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+      nextMotionTimestamp = timeStamp + 100
       Object.assign(event, { acceleration, accelerationIncludingGravity, rotationRate })
       target.dispatchEvent(event)
     },
@@ -187,6 +191,86 @@ test('recording emits motion, gravity fallback, and timestamped location reading
     { type: 'location', timestamp: 1700000000123, lat: 12, lon: 77 },
   ])
   assert.equal(browser.watches[0].options.enableHighAccuracy, true)
+})
+
+test('motion sampling accepts the first valid callback immediately and gates from the last accepted timestamp', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  const emit = (timeStamp) => browser.motion({ x: timeStamp + 0.123456, y: 0, z: null }, null, null, timeStamp)
+  emit(0)
+  assert.equal(readings.length, 1)
+  for (const time of [0, 10, 50, 99.999]) emit(time)
+  assert.equal(readings.length, 1)
+  emit(100)
+  assert.equal(readings.length, 2)
+  emit(150)
+  emit(199)
+  assert.equal(readings.length, 2)
+  emit(250)
+  assert.equal(readings.length, 3)
+  emit(300)
+  assert.equal(readings.length, 3)
+  emit(350)
+  assert.deepEqual(readings.map((reading) => reading.x), [0.123456, 100.123456, 250.123456, 350.123456])
+})
+
+test('invalid motion callbacks do not consume the sampling interval', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  browser.motion(null, null, null, 0)
+  browser.motion(null, null, { alpha: 0 }, 1)
+  assert.equal(readings.length, 1)
+  browser.motion(null, null, null, 101)
+  browser.motion({ x: 1 }, null, null, 102)
+  assert.equal(readings.length, 2)
+})
+
+test('starting a new trip resets motion sampling immediately', (t) => {
+  const browser = recordingBrowser(t)
+  const first = []
+  const second = []
+  startRecording((reading) => first.push(reading))
+  browser.motion({ x: 1 }, null, null, 1000)
+  startRecording((reading) => second.push(reading))
+  browser.motion({ x: 2 }, null, null, 1001)
+  assert.equal(first.length, 1)
+  assert.equal(second.length, 1)
+  assert.equal(second[0].x, 2)
+})
+
+test('stop clears sampling state and stale callbacks cannot affect the next trip', (t) => {
+  const browser = recordingBrowser(t)
+  const added = t.mock.method(browser.target, 'addEventListener')
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  const oldListener = added.mock.calls[0].arguments[1]
+  browser.motion({ x: 1 }, null, null, 1000)
+  stopRecording()
+  browser.motion({ x: 2 }, null, null, 1001)
+  oldListener({ timeStamp: 2000, acceleration: { x: 3 } })
+  assert.equal(readings.length, 1)
+  startRecording((reading) => readings.push(reading))
+  oldListener({ timeStamp: 3000, acceleration: { x: 4 } })
+  browser.motion({ x: 5 }, null, null, 1002)
+  assert.deepEqual(readings.map((reading) => reading.x), [1, 5])
+})
+
+test('motion throttling leaves every location update unchanged', (t) => {
+  const browser = recordingBrowser(t)
+  const readings = []
+  startRecording((reading) => readings.push(reading))
+  for (const time of [0, 10, 20]) {
+    browser.motion({ x: 1 }, null, null, time)
+    browser.watches[0].success({ timestamp: time, coords: { latitude: 12, longitude: 77 } })
+  }
+  assert.equal(readings.filter((reading) => reading.type === 'motion').length, 1)
+  assert.deepEqual(readings.filter((reading) => reading.type === 'location'), [
+    { type: 'location', timestamp: 0, lat: 12, lon: 77 },
+    { type: 'location', timestamp: 10, lat: 12, lon: 77 },
+    { type: 'location', timestamp: 20, lat: 12, lon: 77 },
+  ])
 })
 
 test('motion includes rotation rates alongside gravity fallback acceleration', (t) => {
