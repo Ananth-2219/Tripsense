@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react'
-import { Blob as NodeBlob } from 'node:buffer'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import Recorder from './Recorder.jsx'
@@ -98,48 +97,6 @@ test('motion permission is invoked synchronously from Start and a pending start 
   expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
 })
 
-test('downloads stopped trip readings as JSON and cleans up the download URL', async () => {
-  vi.stubGlobal('Blob', NodeBlob)
-  const createObjectURL = vi.fn(() => 'blob:trip-download')
-  const revokeObjectURL = vi.fn()
-  vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
-  const downloads = []
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
-    downloads.push({ href: this.href, filename: this.download, attached: this.isConnected })
-  })
-  render(<Recorder />)
-  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
-  await start()
-  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
-  const readings = [
-    { type: 'motion', timestamp: 1, x: 0, y: -2, z: null },
-    { type: 'location', timestamp: 2, lat: 12, lon: 77 },
-  ]
-  act(() => readings.forEach(sensors.startRecording.mock.calls[0][0]))
-  fireEvent.click(screen.getByRole('button', { name: 'Stop trip' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Download as JSON' }))
-  const blob = createObjectURL.mock.calls[0][0]
-  expect(blob.type).toBe('application/json')
-  expect(await blob.text()).toBe(JSON.stringify(readings, null, 2))
-  expect(downloads[0]).toEqual({
-    href: 'blob:trip-download',
-    filename: expect.stringMatching(/^tripsense-[\dT-]+Z\.json$/),
-    attached: true,
-  })
-  expect(document.querySelector('a[download]')).toBeNull()
-  expect(revokeObjectURL).not.toHaveBeenCalled()
-  act(() => vi.advanceTimersByTime(1000))
-  expect(revokeObjectURL).toHaveBeenCalledWith('blob:trip-download')
-
-  // Another trip cannot export the previous trip's readings, even if empty.
-  await start()
-  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Stop trip' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Download as JSON' }))
-  expect(await createObjectURL.mock.calls[1][0].text()).toBe('[]')
-  act(() => vi.advanceTimersByTime(1000))
-})
-
 test('unmount cancels a pending permission request', async () => {
   let resolveMotion
   sensors.requestMotionPermission.mockReturnValue(new Promise((resolve) => { resolveMotion = resolve }))
@@ -199,19 +156,19 @@ test('uploads one completed snapshot after cleanup with recording timestamps and
   act(() => onReading({ type: 'motion', timestamp: 3 }))
   expect(uploadTrip.mock.calls[0][0].readings).toEqual(readings)
   expect(screen.getByText('Uploading trip…')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Download as JSON' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
   await act(async () => resolveUpload({ success: true, error: null }))
   expect(screen.getByText('Trip uploaded.')).toBeTruthy()
   expect(uploadTrip).toHaveBeenCalledOnce()
 })
 
-test('failed upload keeps cleanup and local downloads available', async () => {
+test('failed upload keeps cleanup and allows another trip', async () => {
   uploadTrip.mockResolvedValue({ success: false, error: { message: 'Could not upload trip.', code: '42501' } })
   render(<Recorder />)
   await start()
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Stop trip' })))
-  expect(screen.getByText('Trip upload failed. Your JSON download is still available.')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Download as JSON' })).toBeTruthy()
+  expect(screen.getByText('Trip upload failed.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Start trip' })).toBeTruthy()
   expect(sensors.stopRecording).toHaveBeenCalled()
   expect(sensors.releaseWakeLock).toHaveBeenCalled()

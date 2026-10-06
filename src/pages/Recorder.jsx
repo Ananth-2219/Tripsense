@@ -21,7 +21,6 @@ export default function Recorder() {
   const [permissions, setPermissions] = useState({ motion: 'not started', location: 'not started' })
   const [counts, setCounts] = useState({ motion: 0, location: 0 })
   const [message, setMessage] = useState('')
-  const [downloadFilename, setDownloadFilename] = useState(null)
   const [uploadStatus, setUploadStatus] = useState('')
   const readingsRef = useRef([])
   const countsRef = useRef({ motion: 0, location: 0 })
@@ -50,7 +49,6 @@ export default function Recorder() {
     uploadRef.current = null
     setUploadStatus('')
     readingsRef.current = []
-    setDownloadFilename(null)
     countsRef.current = { motion: 0, location: 0 }
     setCounts({ ...countsRef.current })
     setMessage('')
@@ -105,9 +103,6 @@ export default function Recorder() {
     setCounts(totals)
     setPhase('idle')
     setMessage(phase === 'requesting' ? 'Trip start cancelled.' : 'Trip stopped.')
-    if (phase === 'recording') {
-      setDownloadFilename(`tripsense-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
-    }
     console.info('Trip readings captured:', { ...totals, total: readingsRef.current.length })
     if (phase === 'recording' && session?.startedAt) {
       const endedAt = new Date()
@@ -123,25 +118,8 @@ export default function Recorder() {
       setUploadStatus('Uploading trip…')
       void uploadTrip(trip).then(({ success }) => {
         if (uploadRef.current !== session) return
-        setUploadStatus(success ? 'Trip uploaded.' : 'Trip upload failed. Your JSON download is still available.')
+        setUploadStatus(success ? 'Trip uploaded.' : 'Trip upload failed.')
       })
-    }
-  }
-
-  function downloadReadings() {
-    if (!downloadFilename || phase !== 'idle') return
-    const blob = new Blob([JSON.stringify(readingsRef.current, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = downloadFilename
-    document.body.appendChild(link)
-    try {
-      link.click()
-    } finally {
-      link.remove()
-      // Allow the browser to begin the download before releasing its URL.
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
     }
   }
 
@@ -187,15 +165,6 @@ export default function Recorder() {
         >
           {active ? 'Stop trip' : 'Start trip'}
         </button>
-        {downloadFilename && !active && (
-          <button
-            type="button"
-            onClick={downloadReadings}
-            className="mt-3 min-h-14 w-full rounded-xl border border-teal-700 px-5 py-4 text-base font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700"
-          >
-            Download as JSON
-          </button>
-        )}
         {message && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
         {uploadStatus && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{uploadStatus}</p>}
       </div>
