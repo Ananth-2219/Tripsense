@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { uploadTrip } from '../lib/upload.js'
 import {
   requestMotionPermission,
   requestGeolocationPermission,
@@ -21,13 +22,16 @@ export default function Recorder() {
   const [counts, setCounts] = useState({ motion: 0, location: 0 })
   const [message, setMessage] = useState('')
   const [downloadFilename, setDownloadFilename] = useState(null)
+  const [uploadStatus, setUploadStatus] = useState('')
   const readingsRef = useRef([])
   const countsRef = useRef({ motion: 0, location: 0 })
   const sessionRef = useRef(null)
+  const uploadRef = useRef(null)
 
   useEffect(() => () => {
     // Invalidate pending permission requests when navigating away.
     sessionRef.current = null
+    uploadRef.current = null
     stopRecording()
     void releaseWakeLock()
   }, [])
@@ -43,6 +47,8 @@ export default function Recorder() {
     if (sessionRef.current) return
     const session = {}
     sessionRef.current = session
+    uploadRef.current = null
+    setUploadStatus('')
     readingsRef.current = []
     setDownloadFilename(null)
     countsRef.current = { motion: 0, location: 0 }
@@ -68,12 +74,14 @@ export default function Recorder() {
         return
       }
 
+      const startedAt = new Date()
       startRecording((reading) => {
         if (sessionRef.current !== session) return
         if (reading.type !== 'motion' && reading.type !== 'location') return
         readingsRef.current.push(reading)
         countsRef.current[reading.type]++
       })
+      session.startedAt = startedAt
       // startRecording also requests a lock; the helper deduplicates this call.
       void requestWakeLock()
       setPhase('recording')
@@ -89,6 +97,7 @@ export default function Recorder() {
   }
 
   function stopTrip() {
+    const session = sessionRef.current
     sessionRef.current = null
     stopRecording()
     void releaseWakeLock()
@@ -100,6 +109,23 @@ export default function Recorder() {
       setDownloadFilename(`tripsense-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
     }
     console.info('Trip readings captured:', { ...totals, total: readingsRef.current.length })
+    if (phase === 'recording' && session?.startedAt) {
+      const endedAt = new Date()
+      const trip = {
+        startedAt: session.startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        durationSeconds: (endedAt - session.startedAt) / 1000,
+        motionCount: totals.motion,
+        locationCount: totals.location,
+        readings: [...readingsRef.current],
+      }
+      uploadRef.current = session
+      setUploadStatus('Uploading trip…')
+      void uploadTrip(trip).then(({ success }) => {
+        if (uploadRef.current !== session) return
+        setUploadStatus(success ? 'Trip uploaded.' : 'Trip upload failed. Your JSON download is still available.')
+      })
+    }
   }
 
   function downloadReadings() {
@@ -171,6 +197,7 @@ export default function Recorder() {
           </button>
         )}
         {message && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
+        {uploadStatus && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{uploadStatus}</p>}
       </div>
     </section>
   )
