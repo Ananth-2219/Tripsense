@@ -1,5 +1,7 @@
 /** @typedef {'granted' | 'denied' | 'unsupported'} PermissionStatus */
 
+export const MAX_TRIP_DURATION_SECONDS = 1800
+
 let activeRecording = null
 let wakeLock = null
 let pendingWakeLock = null

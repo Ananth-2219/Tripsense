@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test src/lib/sensors.test.js && vitest run src/pages/Recorder.test.jsx",
+    "test": "node --test src/lib/sensors.test.js && vitest run src/pages/Recorder.test.jsx src/lib/upload.test.js",
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
