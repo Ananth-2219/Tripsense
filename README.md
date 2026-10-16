@@ -49,3 +49,22 @@ persisted in Phase 1. Screen wake lock is best effort on supported devices.
 Tests cover sensor lifecycle and Recorder UI behavior with mocked browser APIs.
 Actual permission prompts and sensors should also be checked on a phone over HTTPS.
 
+## GPS trip visualization (Python / Folium)
+
+The separate [Trip Explorer](trip_visualization/README.md) displays only trips with
+completed, validated local analysis artifacts. It uses Streamlit, Folium and
+OpenStreetMap, with speed coloring, timestamp replay, existing event labels and
+data-quality reporting. It reads Supabase MCP exports and never writes the database.
+
+```powershell
+python -m venv .venv-maps
+.venv-maps\Scripts\python.exe -m pip install -r requirements-maps.lock.txt
+.venv-maps\Scripts\python.exe -m streamlit run trip_visualization/app.py --server.address 127.0.0.1 --browser.gatherUsageStats false
+```
+
+See the Trip Explorer documentation for an already-analyzed-trip example,
+read-only MCP verification, speed estimation and event-location matching rules.
+
+Command for trip visualization .venv-maps\Scripts\python.exe -m streamlit run trip_visualization/app.py --server.address 127.0.0.1
+
+

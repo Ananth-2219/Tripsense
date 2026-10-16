@@ -25,3 +25,9 @@ dist-ssr
 *.sln
 *.sw?
 analysis
+
+# Local Python map environment, exports, and cache
+.venv-maps/
+.trip_maps/
+__pycache__/
+*.pyc
