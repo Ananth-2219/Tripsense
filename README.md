@@ -30,7 +30,10 @@ so direct visits to `/dashboard` work.
 - `src/pages/Recorder.jsx` — `/` route, permissions, trip controls, and live reading counts.
 - `src/pages/Dashboard.jsx` — `/dashboard` route, dashboard placeholder.
 - `src/lib/sensors.js` — sensor permissions, motion/location recording, and screen wake lock.
-- `src/lib/upload.js` — reserved for upload integration.
+- `src/lib/upload.js` — insert-only trip upload, stable UUIDs and verified retry recovery.
+- `src/components/TripQuestionnaire.jsx` — accessible post-trip rider questionnaire.
+- `src/lib/followUps.js` — pending-upload and questionnaire lifecycle with IndexedDB persistence.
+- `supabase/migrations/` — SQL to apply separately; see [questionnaire setup](docs/post-trip-feedback.md).
 - `vite.config.js` — React, Tailwind, and PWA plugins and manifest.
 - `public/` — app icons, including 192px, 512px, and maskable PNGs.
 
@@ -39,15 +42,31 @@ The PWA uses `registerType: 'autoUpdate'` and explicit registration in
 `src/main.jsx`. Its generated service worker precaches the application shell
 and automatically activates updates.
 
-The Recorder requests motion and location permission before starting. It buffers
-readings in memory, shows live counts, and logs totals on Stop. After stopping,
-use **Download as JSON** to save the readings array as a formatted local JSON file.
-Each new trip
-resets the buffer; leaving the page stops recording. No data is uploaded or
-persisted in Phase 1. Screen wake lock is best effort on supported devices.
+The Recorder requests motion and location permission before starting, buffers
+readings in memory, and stops automatically at 30 minutes. On Stop it retains
+the completed recording locally and uploads it to Supabase. Failed saves can be
+retried from the Recorder, including after reloading on the same browser when
+device storage is available. Screen wake lock is best effort on supported devices.
+
+After a confirmed save, an optional seven-question rider questionnaire opens.
+Choose **Submit later** to retain a draft on this browser, or **Skip questionnaire**
+to remove the local draft while keeping the saved trip. Feedback remains separate
+subjective metadata; no driving score, sensor thresholds or map labels change.
+
+**Database setup is required before feedback can be saved.** The migration was
+not applied through the read-only MCP connection. Follow
+[post-trip feedback setup and permissions](docs/post-trip-feedback.md).
+Configure `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` for the existing
+project. Only the public/publishable key belongs in this frontend.
 
 Tests cover sensor lifecycle and Recorder UI behavior with mocked browser APIs.
 Actual permission prompts and sensors should also be checked on a phone over HTTPS.
+
+`npm test` also runs questionnaire, IndexedDB recovery, upload association and
+local PostgreSQL migration/access-control tests. `npm run test:browser` runs
+isolated Chrome/Chromium against a local PostgreSQL engine with all remote APIs
+intercepted; it never writes to live Supabase. See the questionnaire guide for
+browser prerequisites, limits and test coverage.
 
 ## GPS trip visualization (Python / Folium)
 

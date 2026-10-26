@@ -6,7 +6,14 @@ import Recorder, { MAX_TRIP_DURATION_SECONDS } from './Recorder.jsx'
 import * as sensors from '../lib/sensors.js'
 import { uploadTrip } from '../lib/upload.js'
 
-vi.mock('../lib/upload.js', () => ({ uploadTrip: vi.fn() }))
+vi.mock('../lib/upload.js', () => ({
+  uploadTrip: vi.fn(),
+  createTripIdentity: () => ({id:'877f6a92-fa06-4b3a-a967-57b72f54cd59',feedbackToken:'a'.repeat(64)}),
+}))
+// Existing lifecycle tests isolate recording from the separately tested durable
+// follow-up flow. The upload assertions still verify the stopped snapshot.
+vi.mock('../lib/followUps.js', () => ({ saveRecordedTrip: trip => uploadTrip(trip) }))
+vi.mock('../components/PostTripFollowUp.jsx', () => ({default:()=>null}))
 
 vi.mock('../lib/sensors.js', () => ({
   MAX_TRIP_DURATION_SECONDS: 1800,
@@ -152,6 +159,7 @@ test('uploads one completed snapshot after cleanup with recording timestamps and
   fireEvent.click(screen.getByRole('button', { name: 'Stop trip' }))
   expect(uploadTrip).toHaveBeenCalledOnce()
   expect(uploadTrip).toHaveBeenCalledWith({
+    id:expect.any(String), feedbackToken:expect.stringMatching(/^[0-9a-f]{64}$/),
     startedAt: '2026-10-07T10:00:00.000Z', endedAt: '2026-10-07T10:00:01.250Z',
     durationSeconds: 1.25, motionCount: 1, locationCount: 1, readings,
   })
@@ -248,6 +256,7 @@ test('automatically stops at 30 minutes, cleans up, and uploads with 1800s durat
   expect(sensors.releaseWakeLock).toHaveBeenCalled()
   expect(uploadTrip).toHaveBeenCalledOnce()
   expect(uploadTrip).toHaveBeenCalledWith({
+    id:expect.any(String), feedbackToken:expect.stringMatching(/^[0-9a-f]{64}$/),
     startedAt: '2026-10-07T10:00:00.000Z',
     endedAt: '2026-10-07T10:30:00.000Z',
     durationSeconds: 1800,

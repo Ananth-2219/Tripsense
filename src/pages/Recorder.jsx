@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { uploadTrip } from '../lib/upload.js'
+import { createTripIdentity } from '../lib/upload.js'
+import { saveRecordedTrip } from '../lib/followUps.js'
+import PostTripFollowUp from '../components/PostTripFollowUp.jsx'
 import {
   requestMotionPermission,
   requestGeolocationPermission,
@@ -86,6 +88,7 @@ export default function Recorder() {
     console.info('Trip readings captured:', { ...totals, total: readingsRef.current.length })
 
     const trip = {
+      ...session.identity,
       startedAt: session.startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
       durationSeconds,
@@ -95,7 +98,7 @@ export default function Recorder() {
     }
 
     uploadRef.current = session
-    void uploadTrip(trip).then(({ success }) => {
+    void saveRecordedTrip(trip).then(({ success }) => {
       if (uploadRef.current !== session) return
       setUploadStatus(success ? 'Trip uploaded.' : 'Trip upload failed.')
       setPhase('idle')
@@ -176,6 +179,7 @@ export default function Recorder() {
         return
       }
 
+      session.identity = createTripIdentity()
       const startedAt = new Date()
       session.startedAt = startedAt
 
@@ -281,6 +285,7 @@ export default function Recorder() {
         {message && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{message}</p>}
         {uploadStatus && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">{uploadStatus}</p>}
       </div>
+      <PostTripFollowUp paused={isRecordingOrRequesting || phase === 'uploading'} />
     </section>
   )
 }
