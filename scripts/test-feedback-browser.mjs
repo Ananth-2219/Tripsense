@@ -1,6 +1,7 @@
 // Isolated Chrome/Chromium smoke test. Every remote request is intercepted;
 // simulated trips and feedback go only to an ephemeral local PostgreSQL engine.
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
@@ -10,6 +11,7 @@ import { PGlite } from '@electric-sql/pglite'
 
 const root = process.cwd()
 const origin = 'http://127.0.0.1:4174'
+const output = path.join(root, '.trip_maps/live-contextual/feedback')
 const database = new PGlite()
 let browser
 let server
@@ -58,11 +60,33 @@ try {
   const feedbackAttempts=[]
   let failUpload=true
   let loseFeedbackResponse=true
+  const savedInputs = new Map()
   const blocked=[]
   const headers={'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'POST,OPTIONS'}
   await context.route('**/*',async route=>{
     const request=route.request()
     const url=new URL(request.url())
+    if (url.origin===origin && url.pathname.startsWith('/api/trips')) {
+      const token = (request.headers().authorization ?? '').replace(/^Bearer /, '')
+      const hash = createHash('sha256').update(token).digest('hex')
+      if (request.method()==='POST' && url.pathname==='/api/trips') {
+        const payload=request.postDataJSON()
+        const body={id:payload.id,started_at:payload.startedAt,ended_at:payload.endedAt,duration_seconds:payload.durationSeconds,
+          motion_count:payload.motionCount,location_count:payload.locationCount,readings:payload.readings,
+          metadata:{...payload.metadata,feedback_token_hash:hash}}
+        attempts.push(body)
+        if (failUpload) {failUpload=false;return route.abort('connectionreset')}
+        await database.query(`INSERT INTO public.trips(id,started_at,ended_at,duration_seconds,motion_count,location_count,readings,metadata)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[body.id,body.started_at,body.ended_at,body.duration_seconds,body.motion_count,body.location_count,body.readings,body.metadata])
+        savedInputs.set(body.id,{hash,fingerprint:request.headers()['x-trip-input-fingerprint']})
+      }
+      const id=url.pathname==='/api/trips'?request.postDataJSON().id:url.pathname.split('/')[3]
+      const saved=savedInputs.get(id)
+      if (!saved || saved.hash!==hash) return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'forbidden'}})})
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({tripId:id,tripSaved:true,
+        policyVersion:'experimental-ride-smoothness/1.0.0',score:{state:'unavailable',status:'provisional',baselineScore:null,
+          reason:'Insufficient observed motion in this questionnaire fixture.',retryable:false,inputFingerprint:saved.fingerprint}})})
+    }
     if (url.origin===origin) return route.continue()
     if (url.hostname!=='tripsense-feedback.invalid') { blocked.push(url.hostname); return route.abort() }
     if (request.method()==='OPTIONS') return route.fulfill({status:204,headers})
@@ -110,7 +134,7 @@ try {
   assert.equal(attempts[0].readings.filter(r=>r.type==='motion').length,1)
   await page.getByRole('button',{name:'Submit answers',exact:true}).click()
   await page.getByRole('alert').filter({hasText:'Please answer all seven'}).waitFor()
-  for (const group of await page.getByRole('group').all()) await group.getByRole('radio',{name:'Not sure',exact:true}).check()
+  for (const group of await page.getByRole('region',{name:'How was your ride?',exact:true}).getByRole('group').all()) await group.getByRole('radio',{name:'Not sure',exact:true}).check()
   await page.getByLabel('Comments (optional)',{exact:true}).fill('Road works during this test ride.')
   await page.getByRole('button',{name:'Submit later',exact:true}).click()
   await page.reload()
@@ -120,19 +144,16 @@ try {
   await page.getByRole('button',{name:'Finish questionnaire',exact:true}).click()
   assert.equal(await page.getByLabel('Comments (optional)',{exact:true}).inputValue(),'Road works during this test ride.')
   assert.equal(await page.locator('input[type=radio]:checked').count(),7)
-  await mkdir(path.join(root,'.trip_maps/questionnaire'),{recursive:true})
+  await mkdir(output,{recursive:true})
   for (const width of [320,390,768,1024,1440]) {
     await page.setViewportSize({width,height:844})
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),`Horizontal overflow at ${width}px`)
     assert.ok(await page.locator('label:has(input[type=radio])').evaluateAll(labels=>labels.every(label=>label.getBoundingClientRect().height>=44)))
-    if ([320,1440].includes(width)) await page.screenshot({path:path.join(root,`.trip_maps/questionnaire/form-${width}.png`),fullPage:true})
+    if ([320,1440].includes(width)) await page.screenshot({path:path.join(output,`form-${width}.png`),fullPage:true})
   }
   await page.getByRole('button',{name:'Submit answers',exact:true}).click()
-  await page.getByRole('alert').filter({hasText:/Could not confirm|Could not save/}).waitFor()
-  assert.equal(await page.getByLabel('Comments (optional)',{exact:true}).inputValue(),'Road works during this test ride.')
-  await page.getByRole('button',{name:'Submit answers',exact:true}).click()
   await page.getByText('Thank you. Your answers are saved.',{exact:true}).waitFor()
-  assert.deepEqual(feedbackAttempts,[attempts[0].id,attempts[0].id])
+  assert.deepEqual(feedbackAttempts,[attempts[0].id], 'An accepted lost response is recovered through its state, without resubmission')
   const {rows}=await database.query('SELECT * FROM public.trip_feedback')
   assert.equal(rows.length,1)
   assert.equal(rows[0].trip_id,attempts[0].id)
@@ -153,7 +174,7 @@ try {
   const result={passed:true,engine:'Isolated Chrome/Chromium + local PGlite PostgreSQL',widths:[320,390,768,1024,1440],
     failedUploadRecoveredAfterReload:true,rawSnapshotAndTripIdPreserved:true,deferredDraftRestored:true,
     lostFeedbackResponseRetriedWithoutDuplicate:true,skipCreatesNoFeedback:true,unmockedRemoteRequests:0,pageErrors:0}
-  await writeFile(path.join(root,'.trip_maps/questionnaire/browser-verification.json'),JSON.stringify(result,null,2))
+  await writeFile(path.join(output,'browser-verification.json'),JSON.stringify(result,null,2))
   console.log(JSON.stringify(result,null,2))
 } finally {
   await browser?.close()

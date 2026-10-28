@@ -1,0 +1,162 @@
+{
+  "allowed_trip_ids": [
+    "17b5188c-8d2f-4911-a4cd-4f5903c41027",
+    "785e2229-ead3-44ca-ba0a-3fe24194d7a9"
+  ],
+  "baseline_implementation_sha256": "d62e8a7f18a714c2e3e8ce794cd39acc62bb6ff1d7ee8bf1d608f548347546d5",
+  "baseline_policy_sha256": "d155736d9789e3b4f875a438b4a1a070bb6a00b5dfa4b60c00ba22b836d907a0",
+  "baseline_reports_sha256": {
+    "17b5188c-8d2f-4911-a4cd-4f5903c41027": "233089e9a2c7c68e510cce8e046039b94fbefb827fb059bc76a401db3e9db63e",
+    "785e2229-ead3-44ca-ba0a-3fe24194d7a9": "7e11ca209d25ab17e7acb3c4505cbdf7d308ab625b022df126c267f8cb9b1099"
+  },
+  "baseline_weights": {
+    "A": 0.35,
+    "J": 0.4,
+    "R": 0.25
+  },
+  "coefficient_origin": "User-specified experimental policy; not derived from validated research",
+  "combination_rules": {
+    "accepted_formats": "String, comma/semicolon/pipe-separated string, or flat JSON array of strings for multi-select fields only.",
+    "canonicalization": "Trim, lowercase, collapse spaces or hyphens to underscores; significant movement becomes significant_movement. No semantic aliases.",
+    "combination": "Sort distinct canonical answers; apply each supported answer vector once. Unknowns neutral and flagged; duplicates flagged. none ignored alongside any non-none selection and conflict flagged.",
+    "incident": "Sum unique supported incident penalties once; near_miss at most1.5 regardless of duplicates.",
+    "multiselect_fields": [
+      "reported_maneuvers",
+      "unusual_event"
+    ],
+    "single_choice": "Exactly one string; arrays or unsupported values neutral and flagged.",
+    "unknown": "Neutral factor vector/zero incident penalty with explicit fallback; no guessed answer."
+  },
+  "confidence": "Qualitative and separate, no numerical adjustment; no inferred driver fault, skill or safety.",
+  "experience_fraction": 0.1,
+  "experience_mapping": {
+    "mixed": 65,
+    "rough": 45,
+    "smooth": 85,
+    "very_rough": 25,
+    "very_smooth": 95
+  },
+  "experience_neutral": "unsure, missing or unsupported: contextual_sensor_score",
+  "experimental": true,
+  "final_formula": "clamp(0.90 * contextual_sensor_score + 0.10 * experience_score - incident_penalty, 0, 100)",
+  "incident_penalties": {
+    "near_miss": 1.5,
+    "none": 0,
+    "pothole": 0
+  },
+  "multiplier_clip": [
+    0.7,
+    1.3
+  ],
+  "multiplier_rules": {
+    "phone_movement": {
+      "significant_movement": {
+        "A": 0.9,
+        "J": 0.85,
+        "R": 0.75
+      },
+      "slight_movement": {
+        "A": 0.98,
+        "J": 0.95,
+        "R": 0.9
+      }
+    },
+    "phone_placement": {
+      "other": {
+        "A": 1,
+        "J": 1,
+        "R": 1
+      },
+      "pocket": {
+        "A": 0.95,
+        "J": 0.95,
+        "R": 0.7
+      },
+      "unknown": {
+        "A": 1,
+        "J": 1,
+        "R": 1
+      }
+    },
+    "reported_maneuvers": {
+      "braking": {
+        "A": 1.05,
+        "J": 1.05,
+        "R": 1
+      },
+      "none": {
+        "A": 1,
+        "J": 1,
+        "R": 1
+      },
+      "turning": {
+        "A": 1,
+        "J": 1,
+        "R": 1.08
+      }
+    },
+    "road_condition": {
+      "mixed": {
+        "A": 1,
+        "J": 0.9,
+        "R": 1
+      },
+      "rough": {
+        "A": 1,
+        "J": 0.8,
+        "R": 1
+      },
+      "smooth": {
+        "A": 1,
+        "J": 1.05,
+        "R": 1
+      }
+    },
+    "traffic_condition": {
+      "heavy": {
+        "A": 0.9,
+        "J": 0.9,
+        "R": 1
+      },
+      "light": {
+        "A": 1.05,
+        "J": 1.05,
+        "R": 1
+      },
+      "moderate": {
+        "A": 0.95,
+        "J": 0.95,
+        "R": 1
+      }
+    },
+    "unusual_event": {
+      "near_miss": {
+        "A": 1,
+        "J": 1,
+        "R": 1
+      },
+      "none": {
+        "A": 1,
+        "J": 1,
+        "R": 1
+      },
+      "pothole": {
+        "A": 1,
+        "J": 0.9,
+        "R": 1
+      }
+    }
+  },
+  "references": {
+    "A": 7.035623639735144,
+    "J": 45.052178163487305,
+    "R": 66.92398673121619
+  },
+  "score_bounds": [
+    0,
+    100
+  ],
+  "sensor_formula": "sum_i(normalize(baseline_weights * clip(product(factors), .70, 1.30))_i * unchanged_component_score_i)",
+  "sensor_fraction": 0.9,
+  "version": "experimental-contextual-scoring/3.0.0"
+}

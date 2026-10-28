@@ -1,0 +1,14 @@
+{
+  "original_implementation_sha256": "c20b54cb17afab4f6f007740fca75b7dc78fb00603a354dfae53120fb6cb1a95",
+  "policy_sha256": "e4d40140853da4b7731b3d8ee1e6ce89469ae4a9c2fd4613a9cfb3a9801d2483",
+  "original_source": "analysis/contextual_scoring_v3/scoring.py",
+  "copied_math_symbols": [
+    "finite",
+    "apply_weights",
+    "canonical",
+    "resolve",
+    "score_trip"
+  ],
+  "admission_change": "Historical allowed_trip_ids remains unchanged in the frozen policy. Live execution admits capability-authorized UUIDs; coefficient math is unchanged.",
+  "no_semantic_aliases": true
+}

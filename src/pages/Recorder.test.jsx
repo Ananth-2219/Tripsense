@@ -167,7 +167,7 @@ test('uploads one completed snapshot after cleanup with recording timestamps and
   expect(sensors.releaseWakeLock.mock.invocationCallOrder.at(-1)).toBeLessThan(uploadTrip.mock.invocationCallOrder[0])
   act(() => onReading({ type: 'motion', timestamp: 3 }))
   expect(uploadTrip.mock.calls[0][0].readings).toEqual(readings)
-  expect(screen.getByText('Uploading trip…')).toBeTruthy()
+  expect(screen.getByText('Uploading ride…')).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Download as JSON' })).toBeNull()
   await act(async () => resolveUpload({ success: true, error: null }))
   expect(screen.getByText('Trip uploaded.')).toBeTruthy()
@@ -267,7 +267,7 @@ test('automatically stops at 30 minutes, cleans up, and uploads with 1800s durat
       { type: 'location', timestamp: 200, lat: 10, lon: 20 },
     ],
   })
-  expect(screen.getByText('30-minute limit reached. Saving trip…')).toBeTruthy()
+  expect(screen.getByText('30-minute limit reached. Uploading ride…')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Saving trip…' }).disabled).toBe(true)
 
   await act(async () => resolveUpload({ success: true, error: null }))

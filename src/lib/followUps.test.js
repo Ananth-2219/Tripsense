@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 vi.mock('./upload.js', () => ({ uploadTrip: vi.fn() }))
-vi.mock('./feedback.js', () => ({ submitTripFeedback: vi.fn() }))
+vi.mock('./feedback.js', () => ({ submitTripFeedback: vi.fn(), getTripFeedbackState: vi.fn().mockResolvedValue('trip_saved') }))
 let followUps, uploadTrip, submitTripFeedback
 const trip = { id:'877f6a92-fa06-4b3a-a967-57b72f54cd59', feedbackToken:'a'.repeat(64),
   endedAt:'2026-10-26T10:00:00Z', readings:[{type:'motion',x:1}] }

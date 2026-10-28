@@ -8,6 +8,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'SUPABASE_')
 
   return {
+    test: { include: ['src/**/*.test.{js,jsx}'] },
+    server: {
+      proxy: { '/api': { target: process.env.SCORING_API_PROXY_TARGET || 'http://127.0.0.1:8000', changeOrigin: true } },
+    },
     define: {
       'import.meta.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL) ?? 'undefined',
       'import.meta.env.SUPABASE_PUBLISHABLE_KEY': JSON.stringify(env.SUPABASE_PUBLISHABLE_KEY) ?? 'undefined',

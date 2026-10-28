@@ -1,0 +1,17 @@
+{
+  ".gitignore": "feef87f1dedc2993a203454d004d2ff0ed3e232cbb12395945a5c74f96fc2403",
+  "README.md": "f19a88afdbc079da683349cb2c09b3843d16a75dd3cf9dbd5a7985cacf8a9413",
+  "docs/post-trip-feedback.md": "5ba1a7f74227e8e811b189e7956fe425aace902bc0ef3a2b80d03c6a7f42add5",
+  "package.json": "e65abf0b726082278eaac2bafed372a8294bd07a507e818768143eb301ac95a7",
+  "scripts/test-feedback-browser.mjs": "7e6d061ffabce495b23e0c11e1ebaf17e8a1c9f1958b0d774cd83c87f73ba019",
+  "src/components/PostTripFollowUp.jsx": "91f2a1d798858c0eab287b22629f49750eebf6786a95e70e6413bff99d1b93a3",
+  "src/lib/followUpStore.js": "7872a0848650d199b7504810efd6efc6322c4cfc6484f4003de009b75b42f3e4",
+  "src/lib/followUps.js": "e0ab84dcf5518e154331863780da9237ab3afbf9d4d2a3906fe227cc8fd7919c",
+  "src/lib/upload.js": "ca607331f5edd890343b95a99d4cd3ff722b330f169e15f7f0b60cd78882e293",
+  "src/lib/upload.test.js": "77a2a370dc613065bd727cf7688fb6e03ee91880c2d82d4ae2339cc1e3d5d0f8",
+  "src/pages/Recorder.jsx": "3d5e5e53b52eb12a576d6edc97980229e1098bba53bc6057c7afb22eee6dfdea",
+  "src/pages/Recorder.test.jsx": "d34106563c1858220ab7a8e78b32f635da92babad4b6c9ec64472a802f7e204a",
+  "tests/test_bus_contextual_v3.py": "66039bd2a92509a16e2442c28594759a2bd28e9cc9690286cc2b0dfa49d52243",
+  "tests/test_contextual_scoring_v3.py": "2e772c232b022390c9c3b1b9b164bc25bc5f56f42f8a63c5d885d57c00de2d00",
+  "vite.config.js": "30bcdf7fd7e8d51c60f96ba54158121228c8fa58c9fc85268188edd40687b209"
+}

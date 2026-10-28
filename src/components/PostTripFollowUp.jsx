@@ -1,15 +1,24 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import TripQuestionnaire from './TripQuestionnaire.jsx'
+import TripScore from './TripScore.jsx'
 import { tripTime } from '../lib/tripTime.js'
 import {
   subscribeFollowUps, getFollowUpSnapshot, initializeFollowUps, retryTripUpload,
   updateFeedbackDraft, deferFeedback, skipFeedback, sendFeedback,
+  refreshScore, retryAnalysis, retryFinalization,
 } from '../lib/followUps.js'
 
 export default function PostTripFollowUp({ paused = false }) {
-  const { entries, loading, storageWarning, busyIds } = useSyncExternalStore(subscribeFollowUps, getFollowUpSnapshot)
+  const { entries, results, loading, storageWarning, busyIds } = useSyncExternalStore(subscribeFollowUps, getFollowUpSnapshot)
   const [message, setMessage] = useState('')
   useEffect(() => { void initializeFollowUps() }, [])
+  useEffect(() => {
+    if (paused) return
+    const timers = entries.filter(entry => entry.status === 'feedback_pending' && entry.score
+      && ['pending', 'processing'].includes(entry.score.state) && (entry.scoreChecks ?? 0) < 30)
+      .map(entry => setTimeout(() => { void refreshScore(entry.id) }, 1000))
+    return () => timers.forEach(clearTimeout)
+  }, [entries, paused])
   useEffect(() => {
     if (!storageWarning || !entries.length) return
     const preventLoss = event => { event.preventDefault(); event.returnValue = '' }
@@ -19,10 +28,10 @@ export default function PostTripFollowUp({ paused = false }) {
 
   async function submit(id, answers, comments) {
     const result = await sendFeedback(id, answers, comments)
-    if (result.success) setMessage('Thank you. Your answers are saved.')
+    if (result.success) setMessage(result.acceptedPreviously ? 'Your earlier feedback is already saved.' : 'Thank you. Your answers are saved.')
     return result
   }
-  const questionnaires = entries.filter(entry => entry.status === 'feedback_pending')
+  const questionnaires = entries.filter(entry => entry.status === 'feedback_pending' && !entry.feedbackComplete)
   const active = questionnaires.filter(entry => !entry.deferred).at(-1)
   if (paused) return null
   return (
@@ -30,6 +39,16 @@ export default function PostTripFollowUp({ paused = false }) {
       {loading && <p role="status" className="mt-6 text-sm text-slate-600">Checking unfinished trips…</p>}
       {storageWarning && <p role="alert" className="mt-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-950">{storageWarning}</p>}
       {message && <p role="status" className="mt-6 rounded-xl bg-teal-50 p-4 text-sm text-teal-950">{message}</p>}
+      {[...entries.filter(entry => entry.status === 'feedback_pending' && entry.score),
+        ...results.filter(result => !entries.some(entry => entry.id === result.id))]
+        .sort((a, b) => b.endedAt.localeCompare(a.endedAt)).map(entry => <TripScore key={entry.id} entry={entry}
+          busy={busyIds.includes(entry.id)} onRetry={id => { void retryAnalysis(id) }}
+          onFinalize={id => { void retryFinalization(id) }}
+          onFeedback={entries.some(e => e.id === entry.id && !e.feedbackComplete) ? id => {
+            void deferFeedback(id, false)
+            document.getElementById('questionnaire-title')?.focus()
+            document.getElementById('questionnaire-title')?.scrollIntoView?.({ behavior: 'smooth' })
+          } : undefined} />)}
       {entries.filter(entry => entry.status === 'upload_pending').map(entry => (
         <section key={entry.id} aria-label={`Unsent trip from ${tripTime(entry.endedAt)}`} className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <h2 className="font-semibold">Trip still needs saving</h2>
@@ -44,7 +63,7 @@ export default function PostTripFollowUp({ paused = false }) {
       ))}
       {active && <TripQuestionnaire key={active.id} entry={active} onDraft={updateFeedbackDraft} onSubmit={submit}
         onLater={id => { void deferFeedback(id, true); setMessage('Draft kept. You can finish it here later.') }}
-        onSkip={id => { void skipFeedback(id); setMessage('Questionnaire skipped. Your trip is still saved.') }} />}
+        onSkip={async id => { await skipFeedback(id); setMessage('Questionnaire skipped. Your trip is still saved.') }} />}
       {questionnaires.filter(entry => entry.id !== active?.id).map(entry => (
         <section key={entry.id} aria-label={`Unfinished questionnaire from ${tripTime(entry.endedAt)}`} className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="font-semibold">Finish your ride questionnaire</h2>

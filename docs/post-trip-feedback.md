@@ -8,7 +8,14 @@ sure**. Comments are optional (maximum 1,000 characters). Submitting requires al
 seven choices; skipping does not. Unusual events requests the main event, with
 comments available for additional context.
 
-## Required database setup — not applied to live Supabase
+## Database setup and live scoring integration
+
+Phase 2 SELECT inspection verified that `trip_feedback_state` and
+`submit_trip_feedback` already exist with capability checks and anon EXECUTE.
+Do not reapply an existing migration. The steps below describe initial feedback
+installation; inspect the actual database first. Phase 2 baseline RPCs are also live.
+The new Phase 3 contextual RPCs require the separate **unapplied** migration in
+[live contextual scoring](live-contextual-scoring.md).
 
 The connected `supabase_trips_readonly` MCP was used only for SELECT inspection
 and historical-data verification. It cannot apply this migration.
@@ -29,12 +36,13 @@ and historical-data verification. It cannot apply this migration.
 4. Ensure `public` is in the project's exposed Data API schemas so the two RPCs
    are discoverable. A schema-cache refresh may be necessary if the Data API
    reports a function-not-found error immediately after applying.
-5. Keep the current `anon` INSERT grant/policy on `public.trips`. The app still
-   does not need SELECT/UPDATE/DELETE permission on trips. Do not grant public
+5. Preserve the current `anon` INSERT grant/policy on `public.trips`. Phase 2
+   uploads through the Python service, without broadening browser grants. Do not grant public
    access to `trip_feedback`, and do not introduce a service-role key in the app.
 6. Deploy the frontend with the existing `SUPABASE_URL` and
    `SUPABASE_PUBLISHABLE_KEY` configuration. No Auth-provider, anonymous-sign-in,
-   account or secret-key configuration is required.
+   account or secret-key configuration is required for feedback RPCs. Phase 2
+   additionally requires backend-only scoring credentials; see its guide.
 
 The migration reuses `trip_feedback` (creating it only if absent), adds validation
 constraints/access controls, and creates two narrowly granted functions.
@@ -45,10 +53,9 @@ The transaction
 rolls back on failure. Removing it later should be a separate reviewed migration;
 dropping the feedback table would discard collected answers.
 
-Until the migration is applied, normal trip inserts still work with the existing
-schema. A feedback save reports that questionnaire saving is unavailable and keeps
-the draft. Token-verified recovery of an ambiguous trip-insert response also needs
-the migration; do not interpret a duplicate UUID as proof of a successful save.
+If feedback RPCs are missing, feedback saving reports unavailable and keeps the
+draft. Phase 2 uploads require their separate scoring backend and migration.
+Never interpret a duplicate UUID alone as proof of a successful save.
 
 ## Access control follows the existing account-free app
 
@@ -109,16 +116,21 @@ to the Recorder to use **Retry saving trip**. There are no automatic background
 uploads, and starting another trip does not overwrite a pending recording.
 Recording before Stop still uses the existing in-memory sensor buffer.
 
-The upload helper remains INSERT-only and supplies the same UUID on every retry.
-It does not upsert or modify any existing trip. An uncertain network response or
-unique-key conflict is considered saved only if the capability-checked state RPC
-confirms that exact trip. Requests time out (30s for trip insert; 20s for RPCs).
+The upload helper supplies the same UUID on every retry through the scoring API.
+It does not modify an existing recording. Recovery first checks the authorized
+score endpoint and input fingerprint. The existing capability-checked feedback
+state RPC can confirm persistence while the scoring API is unavailable. UUID
+alone is insufficient. Requests time out (30s for scoring API; 20s for feedback RPCs).
 Raw recordings are removed from the local queue after confirmed trip upload.
 
 Questionnaire choices/comments persist as a local draft. **Submit later** hides
 the form and leaves a **Finish questionnaire** entry on the Recorder. **Skip
-questionnaire** removes only the local questionnaire/token. A successful feedback
-submission removes the local questionnaire/token too. The saved trip remains in
+questionnaire** clears the draft and completes the feedback lifecycle. The token
+remains until baseline scoring is terminal so Skip cannot prevent score recovery.
+Successful submission retains it until contextual finalization also completes.
+Accepted feedback is recovered through its state without resubmitting answers, and
+a failed final score has its own retry action. Compact results have no token or raw
+readings. The saved trip remains in
 Supabase for both actions. Network errors keep choices and comments, and submission
 locks are separate from upload locks so an upload result cannot be confused with
 a feedback result.
@@ -131,7 +143,10 @@ can still destroy in-memory data. Device storage is not a backup.
 ## Analysis and future score validation
 
 Feedback is subjective rider metadata, not ground truth for a sensor event.
-No score is implemented. The historical frozen magnitude/jerk/rotation thresholds,
+Phase 2 computes frozen experimental baseline v1. Phase 3 uses accepted database
+feedback to add distinct contextual/final results and mark the same row final.
+Feedback never changes baseline mathematics, components or extracted features.
+Skip retains provisional status. The historical frozen magnitude/jerk/rotation thresholds,
 event inventories, GPS screens and Folium workflow are untouched. Missing feedback
 does not invalidate a trip or imply any answer. Future authorized offline analysis
 may LEFT JOIN feedback by UUID, retaining every trip and explicitly reporting
@@ -167,13 +182,15 @@ and 1440px. It never writes to live Supabase or uses a personal browser profile.
 On Windows it locates installed Chrome/Edge; otherwise install test Chromium with
 `npx playwright install chromium`, or set `TRIPSENSE_TEST_BROWSER` to a browser
 executable. The script uses localhost port 4174 and fails if that port is occupied.
-Screenshots and evidence go to ignored `.trip_maps/questionnaire/`.
+New screenshots and evidence go to ignored `.trip_maps/live-contextual/feedback/`;
+historical questionnaire screenshots are preserved.
 This is browser emulation, not a physical Android sensor/permission test.
 
 Existing Python/Folium checks remain:
 
 ```powershell
-.venv-maps/Scripts/python.exe -m unittest discover -s tests
+.venv-scoring/Scripts/python.exe -m pip install -r requirements-scoring-test.lock.txt
+.venv-scoring/Scripts/python.exe -m unittest discover -s tests
 ```
 
 Production dependency audit reports zero vulnerabilities. The complete dependency

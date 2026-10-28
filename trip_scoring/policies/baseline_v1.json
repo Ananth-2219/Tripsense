@@ -1,0 +1,167 @@
+{
+  "allowed_trip_ids": [
+    "17b5188c-8d2f-4911-a4cd-4f5903c41027",
+    "785e2229-ead3-44ca-ba0a-3fe24194d7a9"
+  ],
+  "assumptions": [
+    "Observed arithmetic mean magnitude is the scoring statistic; tails and candidate rates are separate diagnostics, not extra penalties.",
+    "Reciprocal normalization is a new experimental monotone mapping: zero maps to100 and an observed mean equal to the reference maps to50. These anchors do not define a grade or safety boundary.",
+    "A/J/R reference values are identical for every allowed trip and frozen at full historical precision; no per-trip fitting.",
+    "35/40/25 baseline weights are user-proposed experimental values, not validated standards.",
+    "No GPS/event/direct subjective score component; no assumption of equal sensor reliability or vehicle type.",
+    "Score covers observed motion only; missing time is neither imputed nor treated as smooth.",
+    "All context multipliers are1 because differential numerical effects are unsupported; normalized contextual weights equal baseline weights for complete feedback.",
+    "Confidence is descriptive and separate from numerical smoothness; no inference of driver ability or road safety."
+  ],
+  "baseline_weights": {
+    "A": 0.35,
+    "J": 0.4,
+    "R": 0.25
+  },
+  "confidence": {
+    "approach": "Report measured coverage, recording length, GPS availability and categorical placement/movement uncertainty without invented cutoffs or confidence calibration.",
+    "numerical_effect": "none; no score multiplier or confidence percentage"
+  },
+  "context": {
+    "dimensions": [
+      {
+        "answers": [
+          "mount",
+          "hand",
+          "pocket",
+          "bag",
+          "other",
+          "unsure"
+        ],
+        "effect": "Placement informs uncertainty. Pocket and other do not establish calibrated differential A/J/R reliability.",
+        "fields": [
+          "phone_placement"
+        ],
+        "id": "CTX-01"
+      },
+      {
+        "answers": [
+          "still",
+          "slight_movement",
+          "frequent_movement",
+          "picked_up",
+          "unsure"
+        ],
+        "effect": "Movement informs uncertainty for all components, without a defensible relative-weight adjustment.",
+        "fields": [
+          "phone_movement"
+        ],
+        "id": "CTX-02"
+      },
+      {
+        "answers": [
+          "smooth",
+          "mixed",
+          "rough",
+          "unpaved",
+          "unsure"
+        ],
+        "effect": "Road context does not justify suppressing measured disturbances or changing relative weights.",
+        "fields": [
+          "road_condition"
+        ],
+        "id": "CTX-03"
+      },
+      {
+        "answers": [
+          "light",
+          "moderate",
+          "heavy",
+          "stop_go",
+          "unsure"
+        ],
+        "effect": "Traffic informs interpretation, not a stopping penalty or component discount.",
+        "fields": [
+          "traffic_condition"
+        ],
+        "id": "CTX-04"
+      },
+      {
+        "answers": [
+          "very_smooth",
+          "mostly_smooth",
+          "mixed",
+          "rough",
+          "unsure"
+        ],
+        "effect": "Independent subjective description only; no self-report score reward.",
+        "fields": [
+          "perceived_smoothness"
+        ],
+        "id": "CTX-05"
+      },
+      {
+        "answers": [
+          "none",
+          "braking",
+          "acceleration",
+          "turning",
+          "multiple",
+          "unsure"
+        ],
+        "effect": "Untimed reported maneuver does not verify directional braking or vehicle turning.",
+        "fields": [
+          "reported_maneuvers"
+        ],
+        "id": "CTX-06a"
+      },
+      {
+        "answers": [
+          "none",
+          "pothole",
+          "phone_handling",
+          "near_miss",
+          "detour",
+          "other",
+          "unsure"
+        ],
+        "effect": "Unverified unusual-event metadata; no near-miss penalty, no invented timestamps.",
+        "fields": [
+          "unusual_event"
+        ],
+        "id": "CTX-06b"
+      }
+    ],
+    "factor_vector": {
+      "A": 1.0,
+      "J": 1.0,
+      "R": 1.0
+    },
+    "rationale": "No available questionnaire category identifies a calibrated, component-specific reliability effect. All category factors are neutral; interpretation/confidence changes only. No subjective reward or near-miss penalty.",
+    "rule_prefix": "CTX"
+  },
+  "missing_questionnaire": "Baseline remains computable; contextual score unavailable for absent, incomplete, invalid, duplicate or mismatched feedback. Never assume an answer.",
+  "normalization": {
+    "components": {
+      "A": {
+        "reference": 7.035623639735144,
+        "statistic": "mean",
+        "summary_field": "acceleration",
+        "unit": "m/s^2"
+      },
+      "J": {
+        "reference": 45.052178163487305,
+        "statistic": "mean",
+        "summary_field": "absjerk",
+        "unit": "m/s^3"
+      },
+      "R": {
+        "reference": 66.92398673121619,
+        "statistic": "mean",
+        "summary_field": "gyro",
+        "unit": "deg/s"
+      }
+    },
+    "formula": "component = 100 / (1 + observed_mean / frozen_reference)",
+    "origin": "Existing equal-trip-weighted empirical P95 magnitude references; reused as scale anchors, not safety limits",
+    "reference_source": "analysis/two_trip/results.json",
+    "reference_source_sha256": "f2c420909bc2732db4ff1719178e7a331c974c785acac74707fa98589312d823"
+  },
+  "status": "experimental, not scientifically validated",
+  "version": "experimental-ride-smoothness/1.0.0"
+}

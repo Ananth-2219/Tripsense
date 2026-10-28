@@ -79,10 +79,10 @@ export default function Recorder() {
 
     if (reachedLimit) {
       setMessage('30-minute limit reached.')
-      setUploadStatus('30-minute limit reached. Saving trip…')
+      setUploadStatus('30-minute limit reached. Uploading ride…')
     } else {
       setMessage('Trip stopped.')
-      setUploadStatus('Uploading trip…')
+      setUploadStatus('Uploading ride…')
     }
 
     console.info('Trip readings captured:', { ...totals, total: readingsRef.current.length })

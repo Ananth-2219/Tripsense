@@ -1,13 +1,16 @@
-// Only local, unsent recordings and unfinished questionnaires live here.
-// Successful feedback submission or Skip removes the local capability token.
+// Pending recordings, unfinished scoring/feedback and compact results live here.
+// Remove capabilities only after both scoring and feedback finish; never archive them.
 let databasePromise
 
 function openDatabase() {
   if (!databasePromise) {
     databasePromise = new Promise((resolve, reject) => {
       if (!globalThis.indexedDB) return reject(new Error('Device storage unavailable'))
-      const request = indexedDB.open('tripsense-follow-ups', 1)
-      request.onupgradeneeded = () => request.result.createObjectStore('entries', { keyPath: 'id' })
+      const request = indexedDB.open('tripsense-follow-ups', 2)
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('entries')) request.result.createObjectStore('entries', { keyPath: 'id' })
+        if (!request.result.objectStoreNames.contains('results')) request.result.createObjectStore('results', { keyPath: 'id' })
+      }
       request.onerror = () => reject(request.error)
       request.onblocked = () => reject(new Error('Device storage blocked'))
       request.onsuccess = () => {
@@ -20,11 +23,11 @@ function openDatabase() {
   return databasePromise
 }
 
-async function transaction(mode, operation) {
+async function transaction(mode, operation, storeName = 'entries') {
   const db = await openDatabase()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('entries', mode)
-    const request = operation(tx.objectStore('entries'))
+    const tx = db.transaction(storeName, mode)
+    const request = operation(tx.objectStore(storeName))
     tx.oncomplete = () => resolve(request.result)
     tx.onabort = () => reject(tx.error ?? new Error('Device storage interrupted'))
     tx.onerror = () => reject(tx.error)
@@ -34,3 +37,19 @@ async function transaction(mode, operation) {
 export const readEntries = () => transaction('readonly', store => store.getAll())
 export const putEntry = entry => transaction('readwrite', store => store.put(entry))
 export const removeEntry = id => transaction('readwrite', store => store.delete(id))
+export const readResults = () => transaction('readonly', store => store.getAll(), 'results')
+export async function putResult(result) {
+  const db = await openDatabase()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('results', 'readwrite'), store = tx.objectStore('results')
+    const request = store.get(result.id)
+    request.onsuccess = () => {
+      const existing = request.result
+      if (existing?.score.status === 'final') return
+      store.put({ ...result, feedbackComplete: Boolean(result.feedbackComplete || existing?.feedbackComplete) })
+    }
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error)
+  })
+  const all = (await readResults()).sort((a, b) => b.endedAt.localeCompare(a.endedAt))
+  for (const old of all.slice(20)) await transaction('readwrite', store => store.delete(old.id), 'results')
+}

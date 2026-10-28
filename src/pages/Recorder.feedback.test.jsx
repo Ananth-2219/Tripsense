@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 vi.mock('../lib/upload.js',()=>({
   createTripIdentity:()=>({id:'877f6a92-fa06-4b3a-a967-57b72f54cd59',feedbackToken:'a'.repeat(64)}), uploadTrip:vi.fn(),
 }))
-vi.mock('../lib/feedback.js',()=>({submitTripFeedback:vi.fn()}))
+vi.mock('../lib/feedback.js',()=>({submitTripFeedback:vi.fn(),getTripFeedbackState:vi.fn().mockResolvedValue('trip_saved')}))
 vi.mock('../lib/sensors.js',()=>({
   requestMotionPermission:vi.fn(),requestGeolocationPermission:vi.fn(),requestWakeLock:vi.fn(),
   releaseWakeLock:vi.fn(),startRecording:vi.fn(),stopRecording:vi.fn(),

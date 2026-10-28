@@ -1,0 +1,22 @@
+{
+  "README.md": "82de30934797a22e90df09ef252be0828305fbc910d14007a72496a65fb0ddda",
+  "docs/live-baseline-scoring.md": "bcb67fe152d6ea4f154ce9705a9859c002027cc3311f6fc4a0552d3b232e95c9",
+  "docs/post-trip-feedback.md": "8e09bc0d45d3088693d78c8ffeb5dae04e07aca790383d865d4b41ab5b804933",
+  "package.json": "c67b012c72efeccebef9d1eda397c4f0b938520e8b9ce5327ab3c5dbd2ed9527",
+  "scoring_service/app.py": "31cb43535ffd16b461ff13fd0927278c26429dcb8651e009b99d3fbde9283c46",
+  "scoring_service/repository.py": "ad788edbe6d695619d85a8b85d2e69c8289643d280f6ee089d5d872adb32168b",
+  "scripts/scoring-test-database.mjs": "d6e71049cf92d482bbe86dc05794feb2424da099c853d3f236ec6e0ba7929a94",
+  "scripts/test-feedback-browser.mjs": "8377ab4ca662ea1e7c90203da8ef9ab5cdc907a94a3cb3b72ab09eeb3073c7f2",
+  "scripts/test-scoring-browser.mjs": "dd2b93382cba9d63885482926305d9461be3f66add70b89056408f278d499fd1",
+  "src/components/PostTripFollowUp.jsx": "6146da4a21ee400dca5224c711185df1da194231c467f2fed80538cb7ddcd254",
+  "src/components/TripScore.jsx": "73fbbc4aab71f74e350cad215af9c66eec137fa53f9cc0698d03430e79d0d3dd",
+  "src/lib/followUpStore.js": "6ed0a1f16758b2653800c6a398fa023a01340738de15c0d61ba31e0c2a7892f8",
+  "src/lib/followUps.js": "a98cc5676e2f2424a5b8d652bd5881bc442cddc8b7352936a6ac52f1f52971f3",
+  "src/lib/followUps.test.js": "9976c33e1db7c390ee9eb55b21135896e3d1ac5fae7b496c20f7feef7b89150f",
+  "src/lib/liveScoringFlow.test.js": "670126890d83adf6c164c0e37c90bd599a6dd10339ef0b706b0e6fcac04c77d3",
+  "src/lib/scoring.js": "d9b3f9a2f5d613aded1444ecc3a0d23eb9ad41ed229eb54c365c98b4dbf7af79",
+  "src/lib/scoring.test.js": "125c29b590f585d9fb6786cbc2ae8a444f1f440f6588cf66cacfa66611946e37",
+  "src/pages/Recorder.feedback.test.jsx": "386e4813a713f98afd24ea1603249e9adae4e9f82b7b2971091d2332c04680e2",
+  "tests/application_preservation.py": "b2579bdc2e100b36351eef1964e0cd06e676597092292d4c132a940a9b603f13",
+  "tests/test_scoring_repository.py": "df24a4241209cdbdf7dee41389a5f731e3a84aecdf647e951d07c87f2430b5ba"
+}

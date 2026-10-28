@@ -6,6 +6,11 @@
   "scripts": {
     "test": "node --test src/lib/sensors.test.js && vitest run --exclude src/lib/sensors.test.js",
     "test:browser": "node scripts/test-feedback-browser.mjs",
+    "test:scoring:browser": "node scripts/test-scoring-browser.mjs",
+    "test:contextual:browser": "node scripts/test-scoring-browser.mjs",
+    "benchmark:contextual": "node scripts/benchmark-contextual.mjs",
+    "benchmark:scoring": "node scripts/benchmark-live-scoring.mjs",
+    "dev:scoring": ".\\.venv-scoring\\Scripts\\python.exe -m uvicorn scoring_service.app:app --host 127.0.0.1 --port 8000 --no-access-log",
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",

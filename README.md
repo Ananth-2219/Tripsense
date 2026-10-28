@@ -11,6 +11,14 @@ npm install
 npm run dev
 ```
 
+Live ride upload now requires the local Python baseline service. See
+[live baseline scoring setup](docs/live-baseline-scoring.md) for the pinned Python
+environment, backend-only credentials, reviewed SQL migration, phone HTTPS setup,
+endpoints and tests. Start it in a separate terminal with `npm run dev:scoring`.
+Phase 2 ingestion/baseline RPCs are live. Phase 3 adds accepted-feedback finalization;
+its [reviewed migration and setup](docs/live-contextual-scoring.md) require manual
+application and a backend restart. Existing backend environment variables are unchanged.
+
 ## Checks and production preview
 
 ```sh
@@ -30,7 +38,10 @@ so direct visits to `/dashboard` work.
 - `src/pages/Recorder.jsx` — `/` route, permissions, trip controls, and live reading counts.
 - `src/pages/Dashboard.jsx` — `/dashboard` route, dashboard placeholder.
 - `src/lib/sensors.js` — sensor permissions, motion/location recording, and screen wake lock.
-- `src/lib/upload.js` — insert-only trip upload, stable UUIDs and verified retry recovery.
+- `src/lib/upload.js` — single-upload scoring API, stable UUIDs and verified retry recovery.
+- `trip_scoring/` — import-safe frozen baseline v1 and contextual v3 mathematics/policies.
+- `scoring_service/` — bounded FastAPI scoring, capability authorization and durable persistence.
+- `src/components/TripScore.jsx` — provisional/final results, breakdowns and recovery.
 - `src/components/TripQuestionnaire.jsx` — accessible post-trip rider questionnaire.
 - `src/lib/followUps.js` — pending-upload and questionnaire lifecycle with IndexedDB persistence.
 - `supabase/migrations/` — SQL to apply separately; see [questionnaire setup](docs/post-trip-feedback.md).
@@ -44,17 +55,22 @@ and automatically activates updates.
 
 The Recorder requests motion and location permission before starting, buffers
 readings in memory, and stops automatically at 30 minutes. On Stop it retains
-the completed recording locally and uploads it to Supabase. Failed saves can be
+the completed recording locally and uploads it through the Python service to Supabase. Failed saves can be
 retried from the Recorder, including after reloading on the same browser when
 device storage is available. Screen wake lock is best effort on supported devices.
 
 After a confirmed save, an optional seven-question rider questionnaire opens.
 Choose **Submit later** to retain a draft on this browser, or **Skip questionnaire**
-to remove the local draft while keeping the saved trip. Feedback remains separate
-subjective metadata; no driving score, sensor thresholds or map labels change.
+to remove the local draft while keeping the saved trip. Analysis runs automatically
+after durable upload and displays an experimental provisional ride-smoothness score.
+Submitting feedback finalizes the ride using accepted database answers and frozen
+experimental v3. The original baseline stays unchanged. Skip leaves it provisional.
+The token stays locally until analysis, feedback and any requested finalization finish;
+only durably archived compact results (up to 20) remain afterward.
 
-**Database setup is required before feedback can be saved.** The migration was
-not applied through the read-only MCP connection. Follow
+**Database setup is required for live scoring.** Existing feedback RPCs were
+verified through the read-only MCP connection. Phase 2 RPCs are installed; only the
+new contextual migration remains unapplied by this task. Follow the scoring guides and
 [post-trip feedback setup and permissions](docs/post-trip-feedback.md).
 Configure `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` for the existing
 project. Only the public/publishable key belongs in this frontend.

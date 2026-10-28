@@ -28,6 +28,8 @@ analysis
 
 # Local Python map environment, exports, and cache
 .venv-maps/
+.venv-scoring/
 .trip_maps/
 __pycache__/
 *.pyc
+supabase/.temp/
