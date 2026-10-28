@@ -21,5 +21,5 @@
   "tests/application_preservation.py": "b2579bdc2e100b36351eef1964e0cd06e676597092292d4c132a940a9b603f13",
   "tests/live_service_support.py": "4067494247fd851b9d42e887bd194b1922fe1de11efaf50afada4c47e65eabbd",
   "tests/test_scoring_repository.py": "e33d56d4566fdae94a2c12055d4a13b219e4d58eb1c3de87e19e2b3cfaee3f70",
-  "vite.config.js": "4b88eb70d43b649a0e7d768370c53e042760aaaa29be318f29f7239e63db5b3c"
+  "vite.config.js": "5afd74e9d0f1149c331d61a04a622e02c204a20d66b75903596f92f3c9e9002c"
 }

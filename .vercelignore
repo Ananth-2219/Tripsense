@@ -1,0 +1,24 @@
+# Python virtual environments
+.venv*
+venv/
+env/
+
+# Large historical analysis datasets and offline map caches
+analysis/
+.trip_maps/
+trip_visualization/
+
+# Tests and development scripts (executed in CI, not needed in serverless bundle)
+tests/
+scripts/
+
+# Local credentials and environment files
+.env*.local
+.env.scoring
+*.local
+
+# Logs and system files
+*.log
+.DS_Store
+.git
+.github
