@@ -11,7 +11,7 @@ def payload():
   readings=[dict(type='motion',timestamp=1793059200000+i*100,x=1,y=0,z=0,rotationAlpha=1,rotationBeta=0,rotationGamma=0) for i in range(3)])
 
 class MemoryRepository:
- def __init__(self):self.trips={};self.scores={};self.tokens={};self.lock=threading.RLock();self.reads=0;self.fail_ingest=False;self.fail_finish=False
+ def __init__(self):self.trips={};self.scores={};self.tokens={};self.evaluations={};self.lock=threading.RLock();self.reads=0;self.fail_ingest=False;self.fail_finish=False
  def authorize(self,id,token):
   if id not in self.tokens or self.tokens[id]!=hashlib.sha256(token.encode()).hexdigest():raise RepositoryError('forbidden',403)
  def get(self,id,token,include_readings=False):
@@ -47,4 +47,18 @@ class MemoryRepository:
    for k in ['baseline_score','acceleration_score','jerk_score','rotation_score']:s[k]=result.get(k)
    s['quality_details']=dict(result.get('quality_details',{}),input_fingerprint=fingerprint,processing=dict(state=result['state'],attempts=p['attempts'],reason=result.get('reason')))
    s['context_details']=deepcopy(result.get('audit',{}));return True
+ def evaluation_get(self,id,token):
+  with self.lock:
+   self.authorize(id,token);return deepcopy(self.evaluations.get(id))
+ def evaluation_submit(self,id,token,comfort_rating=None,comfort_skipped=None,score_agreement=None,score_agreement_skipped=None):
+  with self.lock:
+   self.authorize(id,token)
+   existing=self.evaluations.setdefault(id,dict(trip_id=id,comfort_rating=None,comfort_rating_submitted_at=None,comfort_rating_skipped=False,score_agreement=None,score_agreement_submitted_at=None,score_agreement_skipped=False))
+   if existing['comfort_rating'] is None:
+    if comfort_rating is not None:existing.update(comfort_rating=comfort_rating,comfort_rating_submitted_at='2026-10-28T00:00:00Z',comfort_rating_skipped=False)
+    elif comfort_skipped is True and not existing['comfort_rating_skipped']:existing.update(comfort_rating=None,comfort_rating_submitted_at='2026-10-28T00:00:00Z',comfort_rating_skipped=True)
+   if existing['score_agreement'] is None:
+    if score_agreement is not None:existing.update(score_agreement=score_agreement,score_agreement_submitted_at='2026-10-28T00:00:00Z',score_agreement_skipped=False)
+    elif score_agreement_skipped is True and not existing['score_agreement_skipped']:existing.update(score_agreement=None,score_agreement_submitted_at='2026-10-28T00:00:00Z',score_agreement_skipped=True)
+   return deepcopy(existing)
  def close(self):pass

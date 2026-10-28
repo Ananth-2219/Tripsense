@@ -10,7 +10,15 @@ export default defineConfig(({ mode }) => {
   return {
     test: { include: ['src/**/*.test.{js,jsx}'] },
     server: {
-      proxy: { '/api': { target: process.env.SCORING_API_PROXY_TARGET || 'http://127.0.0.1:8000', changeOrigin: true } },
+      allowedHosts: [
+        'waves-relay-elegant-handbook.trycloudflare.com',
+      ],
+      proxy: {
+        '/api': {
+          target: process.env.SCORING_API_PROXY_TARGET || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+      },
     },
     define: {
       'import.meta.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL) ?? 'undefined',

@@ -7,7 +7,7 @@ from fastapi import FastAPI,Request,HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from scoring_service.repository import RepositoryError,from_environment
-from scoring_service.schemas import TripPayload,MAX_BYTES
+from scoring_service.schemas import TripPayload,EvaluationPayload,MAX_BYTES
 from scoring_service.worker import Worker
 from scoring_service.finalization import Finalizer
 from trip_scoring.baseline import load_policy
@@ -150,6 +150,19 @@ def create_app(repository=None,*,workers=2):
             state='unavailable'
         result['score']['contextual'].update(state=state,feedbackAccepted=bool(saved.get('feedback')) or bool((saved.get('score') or {}).get('feedback_id')))
         return JSONResponse(result,headers={'Cache-Control':'no-store'})
+    @app.get('/api/trips/{trip_id}/evaluation')
+    def get_evaluation(trip_id:UUID,request:Request):
+        token=authorize(request)
+        saved=repo.evaluation_get(str(trip_id),token)
+        return JSONResponse({'tripId':str(trip_id),'evaluation':saved},headers={'Cache-Control':'no-store'})
+    @app.post('/api/trips/{trip_id}/evaluation')
+    async def submit_evaluation(trip_id:UUID,payload:EvaluationPayload,request:Request):
+        token=authorize(request)
+        from starlette.concurrency import run_in_threadpool
+        saved=await run_in_threadpool(repo.evaluation_submit,str(trip_id),token,
+            comfort_rating=payload.comfortRating,comfort_skipped=payload.comfortSkipped,
+            score_agreement=payload.scoreAgreement,score_agreement_skipped=payload.scoreAgreementSkipped)
+        return JSONResponse({'tripId':str(trip_id),'evaluation':saved},headers={'Cache-Control':'no-store'})
     return app
 
 app=create_app()

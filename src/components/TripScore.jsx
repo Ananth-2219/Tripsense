@@ -1,6 +1,18 @@
 import { tripTime } from '../lib/tripTime.js'
+import IndependentComfortRating from './IndependentComfortRating.jsx'
+import ScoreAgreement from './ScoreAgreement.jsx'
 
-export default function TripScore({ entry, onRetry, onFeedback, onFinalize, busy = false }) {
+export default function TripScore({
+  entry,
+  onRetry,
+  onFeedback,
+  onFinalize,
+  onComfortRating,
+  onSkipComfort,
+  onScoreAgreement,
+  onSkipAgreement,
+  busy = false,
+}) {
   const { score, id } = entry
   if (!score) return null
   const analyzing = ['pending', 'processing'].includes(score.state)
@@ -10,22 +22,36 @@ export default function TripScore({ entry, onRetry, onFeedback, onFinalize, busy
   const feedbackSaved = entry.feedbackDisposition === 'submitted' || context.feedbackAccepted
   const quality = score.quality ?? {}
   const number = value => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '—'
+  const evalState = entry.evaluation
+  const needsComfortRating = evalState && !evalState.comfortSubmitted && !evalState.comfortSkipped
+
   return (
     <section aria-labelledby={`score-${id}`} className="mt-6 overflow-hidden rounded-2xl border border-teal-200 bg-white">
       <div className="border-b border-teal-100 bg-teal-50 px-5 py-4 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-teal-800">Ride saved · Experimental assessment</p>
-        <h2 id={`score-${id}`} className="mt-1 text-lg font-semibold text-slate-900">{final ? 'Final ride-smoothness score' : ready ? 'Provisional ride-smoothness score' : analyzing ? 'Analyzing ride' : 'Score unavailable'}</h2>
+        <h2 id={`score-${id}`} className="mt-1 text-lg font-semibold text-slate-900">
+          {needsComfortRating ? 'Ride comfort evaluation' : final ? 'Final ride-smoothness score' : ready ? 'Provisional ride-smoothness score' : analyzing ? 'Analyzing ride' : 'Score unavailable'}
+        </h2>
         {entry.endedAt && <p className="mt-1 text-xs text-slate-600">Ride ending {tripTime(entry.endedAt)}</p>}
       </div>
       <div className="p-5 sm:p-6">
-        {analyzing && <div role="status" className="space-y-3">
-          <p className="text-sm leading-6 text-slate-600">Your ride is saved. We’re checking the recorded motion.</p>
-          <div aria-hidden="true" className="h-3 w-2/3 animate-pulse rounded bg-slate-100 motion-reduce:animate-none" />
-          {(entry.scoreChecks ?? 0) >= 30 && <button type="button" onClick={() => onRetry?.(id)} className="min-h-12 rounded-lg border border-teal-700 px-4 text-sm font-semibold text-teal-800">Check analysis</button>}
-        </div>}
-        {ready && <>
-          <p className="flex items-baseline gap-2 text-teal-950"><span className="text-5xl font-bold tracking-tight tabular-nums">{number(final ? context.finalScore : score.baselineScore)}</span><span className="text-lg text-slate-500">/100</span></p>
-          <p className="mt-2 text-xs font-medium text-slate-500">Status: {final ? 'Final · Includes accepted rider feedback' : 'Provisional · Recorded phone motion'}</p>
+        {needsComfortRating ? (
+          <IndependentComfortRating
+            tripId={id}
+            onSave={rating => onComfortRating?.(id, rating)}
+            onSkip={() => onSkipComfort?.(id)}
+            busy={busy}
+          />
+        ) : (
+          <>
+            {analyzing && <div role="status" className="space-y-3">
+              <p className="text-sm leading-6 text-slate-600">Your ride is saved. We’re checking the recorded motion.</p>
+              <div aria-hidden="true" className="h-3 w-2/3 animate-pulse rounded bg-slate-100 motion-reduce:animate-none" />
+              {(entry.scoreChecks ?? 0) >= 30 && <button type="button" onClick={() => onRetry?.(id)} className="min-h-12 rounded-lg border border-teal-700 px-4 text-sm font-semibold text-teal-800">Check analysis</button>}
+            </div>}
+            {ready && <>
+              <p className="flex items-baseline gap-2 text-teal-950"><span className="text-5xl font-bold tracking-tight tabular-nums">{number(final ? context.finalScore : score.baselineScore)}</span><span className="text-lg text-slate-500">/100</span></p>
+              <p className="mt-2 text-xs font-medium text-slate-500">Status: {final ? 'Final · Includes accepted rider feedback' : 'Provisional · Recorded phone motion'}</p>
           {final ? <>
             <dl className="mt-5 grid grid-cols-2 gap-3 border-y border-slate-100 py-4">
               <div><dt className="text-xs text-slate-600">Original baseline</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{number(score.baselineScore)}</dd></div>
@@ -58,6 +84,15 @@ export default function TripScore({ entry, onRetry, onFeedback, onFinalize, busy
               {(quality.warnings ?? []).map(warning => <p key={warning}>{warning}</p>)}
             </div>
           </details>
+          {evalState && !evalState.agreementSkipped && (
+            <ScoreAgreement
+              tripId={id}
+              chosen={evalState.scoreAgreement}
+              onSelect={agreement => onScoreAgreement?.(id, agreement)}
+              onSkip={() => onSkipAgreement?.(id)}
+              busy={busy}
+            />
+          )}
         </>}
         {!ready && !analyzing && <div role="status">
           <p className="text-sm leading-6 text-slate-700">Your ride is saved. {score.reason || 'The analysis could not be confirmed.'}</p>
@@ -71,7 +106,9 @@ export default function TripScore({ entry, onRetry, onFeedback, onFinalize, busy
             className="mt-3 min-h-12 w-full rounded-xl border border-teal-700 px-3 py-2 font-semibold text-teal-800 disabled:opacity-50">Retry final score</button>}
         </div>}
         {onFeedback && !entry.feedbackComplete && <button type="button" onClick={() => onFeedback(id)} className="mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold text-teal-800 underline">Add ride feedback <span className="font-normal">(optional)</span></button>}
-      </div>
-    </section>
+      </>
+    )}
+  </div>
+</section>
   )
 }

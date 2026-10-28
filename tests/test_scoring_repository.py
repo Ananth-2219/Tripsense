@@ -50,3 +50,21 @@ class RepositoryTests(unittest.TestCase):
             result=client.get('/api/trips/31e14df0-1020-4d15-af90-003d48ef2631/score')
             self.assertEqual(result.status_code,503)
             self.assertEqual(result.json()['error']['code'],'configuration_required')
+
+    def test_invalid_api_key_maps_to_configuration_required(self):
+        """PostgREST 401 response with 'Invalid API key' (no DB code) must raise configuration_required, not unavailable."""
+        repo=SupabaseRepository('https://local.invalid','test-key');repo.client.close()
+        try:
+            with httpx.Client(transport=httpx.MockTransport(lambda request:httpx.Response(401,json={'message':'Invalid API key','hint':'Double check your Supabase `anon` or `service_role` API key.'})),base_url='https://local.invalid/') as client:
+                repo.client=client
+                with self.assertRaises(RepositoryError) as failure:repo.rpc('live_baseline_get',{})
+                self.assertEqual(failure.exception.code,'configuration_required')
+                self.assertEqual(failure.exception.status,503)
+        finally:repo.close()
+
+    def test_placeholder_credentials_fail_closed(self):
+        from scoring_service.repository import from_environment
+        for placeholder in ['<YOUR_SECRET_KEY>','<YOUR_SUPABASE_SERVICE_ROLE_KEY>','BACKEND-ONLY-SERVICE-ROLE-KEY']:
+            with patch.dict(os.environ,{'SCORING_SUPABASE_URL':'https://example.supabase.co','SCORING_SUPABASE_SERVICE_KEY':placeholder}):
+                self.assertIsNone(from_environment())
+

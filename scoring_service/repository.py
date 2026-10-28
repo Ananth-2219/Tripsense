@@ -21,6 +21,7 @@ class SupabaseRepository:
             if response.is_success:return response.json()
             data=response.json();code=data.get('code');msg=data.get('message','')
         except (httpx.HTTPError,ValueError):raise RepositoryError() from None
+        if response.status_code==401 or code in ['PGRST301','PGRST302']:raise RepositoryError('configuration_required')
         if code=='42501':
             if 'permission denied for function' in msg:raise RepositoryError('configuration_required')
             raise RepositoryError('forbidden',403)
@@ -33,9 +34,12 @@ class SupabaseRepository:
     def finish(self,id,token,fingerprint,lease,result):return self.rpc('live_baseline_finish',dict(p_trip_id=id,p_feedback_token=token,p_input_fingerprint=fingerprint,p_lease_id=lease,p_result=result))
     def context_get(self,id,token):return self.rpc('live_contextual_get',dict(p_trip_id=id,p_feedback_token=token))
     def context_finish(self,id,token,feedback_id,fingerprint,result):return self.rpc('live_contextual_finish',dict(p_trip_id=id,p_feedback_token=token,p_feedback_id=feedback_id,p_source_fingerprint=fingerprint,p_result=result))
+    def evaluation_get(self,id,token):return self.rpc('live_evaluation_get',dict(p_trip_id=id,p_feedback_token=token))
+    def evaluation_submit(self,id,token,comfort_rating=None,comfort_skipped=None,score_agreement=None,score_agreement_skipped=None):
+        return self.rpc('live_evaluation_submit',dict(p_trip_id=id,p_feedback_token=token,p_comfort_rating=comfort_rating,p_comfort_skipped=comfort_skipped,p_score_agreement=score_agreement,p_score_agreement_skipped=score_agreement_skipped))
     def close(self):self.client.close()
 
 def from_environment():
     url=os.getenv('SCORING_SUPABASE_URL');key=os.getenv('SCORING_SUPABASE_SERVICE_KEY')
-    if not url or not key:return None
+    if not url or not key or key.startswith('<') or any(p in key for p in ['YOUR-','YOUR_','BACKEND-ONLY']):return None
     return SupabaseRepository(url,key,allow_local_http=os.getenv('SCORING_ALLOW_LOCAL_HTTP')=='1')

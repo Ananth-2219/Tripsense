@@ -8,9 +8,10 @@ ALLOWED={
  'src/lib/followUps.js','src/lib/followUpStore.js','src/lib/scoring.js',
  'src/lib/followUps.test.js','src/lib/liveScoringFlow.test.js','src/lib/scoring.test.js',
  'src/pages/Recorder.feedback.test.jsx',
- 'scoring_service/app.py','scoring_service/repository.py',
- 'tests/application_preservation.py','tests/test_scoring_repository.py','scripts/scoring-test-database.mjs',
- 'scripts/test-scoring-browser.mjs','scripts/test-feedback-browser.mjs',
+ 'scoring_service/app.py','scoring_service/repository.py','scoring_service/schemas.py',
+ 'tests/application_preservation.py','tests/test_scoring_repository.py','tests/live_service_support.py',
+ 'scripts/scoring-test-database.mjs','scripts/test-scoring-browser.mjs','scripts/test-feedback-browser.mjs',
+ 'vite.config.js',
 }
 manifest={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in sorted(ALLOWED)}
 (ROOT/'tests/fixtures/phase3_application_hashes.json').write_text(json.dumps(manifest,indent=2)+'\n')

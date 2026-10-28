@@ -1,7 +1,7 @@
 """Untrusted HTTP input boundary. Preserve readings; validate rather than repair."""
 from datetime import datetime,timezone
 import json,math
-from typing import Any
+from typing import Any, Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel,ConfigDict,Field,StrictInt,model_validator
 
@@ -55,3 +55,11 @@ class TripPayload(BaseModel):
         return dict(id=str(self.id),started_at=utc(self.startedAt).isoformat(),ended_at=utc(self.endedAt).isoformat(),
             duration_seconds=self.durationSeconds,motion_count=self.motionCount,location_count=self.locationCount,
             readings=self.readings,metadata=self.metadata)
+
+class EvaluationPayload(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    comfortRating:Optional[int]=Field(None,ge=0,le=100)
+    comfortSkipped:Optional[bool]=None
+    scoreAgreement:Optional[Literal['yes','partially','no','not_sure']]=None
+    scoreAgreementSkipped:Optional[bool]=None
+

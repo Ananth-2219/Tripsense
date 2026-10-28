@@ -3,6 +3,7 @@ import { submitTripFeedback, getTripFeedbackState } from './feedback.js'
 import { validTripAccess } from './feedbackQuestions.js'
 import { readEntries, putEntry, removeEntry, readResults, putResult } from './followUpStore.js'
 import { getScoreStatus, retryScore, finalizeScore } from './scoring.js'
+import { submitTripEvaluation } from './evaluation.js'
 
 const listeners = new Set()
 const running = new Map()
@@ -24,7 +25,10 @@ export function initializeFollowUps() {
       && ['upload_pending', 'feedback_pending'].includes(e.status))
     publish({ entries: valid.map(entry => entry.status === 'feedback_pending' && !Object.hasOwn(entry, 'score')
       ? { ...entry, score: { state: 'pending', retryable: true } } : entry), results, loading: false })
-    for (const entry of valid.filter(e => e.status === 'feedback_pending')) void recoverAcceptedFeedback(entry.id)
+    for (const entry of valid.filter(e => e.status === 'feedback_pending')) {
+      void recoverAcceptedFeedback(entry.id)
+      if (entry.evaluation?.pendingSync) void syncEvaluation(entry.id)
+    }
   }).catch(() => publish({ loading: false, storageWarning: warning }))
   return initialization
 }
@@ -59,6 +63,15 @@ export async function saveRecordedTrip(trip) {
     id: trip.id, feedbackToken: trip.feedbackToken, endedAt: trip.endedAt,
     createdAt: new Date().toISOString(), status: 'upload_pending', trip,
     answers: {}, comments: '', deferred: false, uploadAttempts: 0,
+    evaluation: {
+      comfortRating: null,
+      comfortSubmitted: false,
+      comfortSkipped: false,
+      scoreAgreement: null,
+      agreementSubmitted: false,
+      agreementSkipped: false,
+      pendingSync: false,
+    },
   })
   return retryTripUpload(trip.id)
 }
@@ -76,6 +89,7 @@ export function retryTripUpload(id) {
         feedbackDisposition: result.feedbackSubmitted ? 'submitted' : undefined,
         score: result.score ?? null, scoreChecks: 0 })
       if (result.feedbackSubmitted) void finalizeRide(id)
+      if (entry.evaluation?.pendingSync) void syncEvaluation(id)
       return result
     }
     return { success: false, error: { message: 'Could not confirm the trip was saved. Retry when connected; your recording is kept.' } }
@@ -131,7 +145,8 @@ async function settle(entry) {
   if (entry.score && terminal(entry)) {
     const existing = snapshot.results.find(r => r.id === entry.id)
     const result = { id: entry.id, endedAt: entry.endedAt, score: existing?.score.status === 'final' ? existing.score : entry.score,
-      feedbackComplete: Boolean(entry.feedbackComplete || existing?.feedbackComplete), feedbackDisposition: entry.feedbackDisposition }
+      feedbackComplete: Boolean(entry.feedbackComplete || existing?.feedbackComplete), feedbackDisposition: entry.feedbackDisposition,
+      evaluation: entry.evaluation || existing?.evaluation }
     publish({ results: [...snapshot.results.filter(r => r.id !== entry.id), result].slice(-20) })
     try { await putResult(result) } catch { publish({ storageWarning: warning }); return }
   }
@@ -230,3 +245,123 @@ function finalizeRide(id, { recoverFirst = false } = {}) {
   })
 }
 export const retryFinalization = id => finalizeRide(id, { recoverFirst: true })
+
+export async function syncEvaluation(id) {
+  return once('eval-sync', id, async () => {
+    const entry = find(id)
+    if (!entry || !entry.evaluation || !entry.feedbackToken || entry.status !== 'feedback_pending') return { success: false }
+    const ev = entry.evaluation
+    const payload = {}
+    if (ev.comfortSubmitted && ev.comfortRating !== null) payload.comfortRating = ev.comfortRating
+    if (ev.comfortSkipped) payload.comfortSkipped = true
+    if (ev.agreementSubmitted && ev.scoreAgreement !== null) payload.scoreAgreement = ev.scoreAgreement
+    if (ev.agreementSkipped) payload.scoreAgreementSkipped = true
+    if (Object.keys(payload).length === 0) return { success: true }
+    try {
+      const res = await submitTripEvaluation(id, entry.feedbackToken, payload)
+      if (res.success) {
+        const latest = find(id)
+        if (latest?.evaluation) await persist({ ...latest, evaluation: { ...latest.evaluation, pendingSync: false } })
+      }
+      return res
+    } catch {
+      return { success: false }
+    }
+  })
+}
+
+export async function submitComfortRating(id, rating) {
+  const entry = find(id)
+  if (!entry) return { success: false }
+  const validNum = typeof rating === 'number' && Number.isFinite(rating) && rating >= 0 && rating <= 100
+  if (!validNum) return { success: false, error: { message: 'Invalid rating. Choose a value between 0 and 100.' } }
+  const updatedEval = {
+    ...entry.evaluation,
+    comfortRating: rating,
+    comfortSubmitted: true,
+    comfortSkipped: false,
+    comfortSubmittedAt: new Date().toISOString(),
+    pendingSync: entry.status === 'upload_pending',
+  }
+  await persist({ ...entry, evaluation: updatedEval })
+  if (entry.status === 'feedback_pending') {
+    void submitTripEvaluation(id, entry.feedbackToken, { comfortRating: rating }).then(res => {
+      if (!res.success) {
+        const current = find(id)
+        if (current?.evaluation) void persist({ ...current, evaluation: { ...current.evaluation, pendingSync: true } })
+      }
+    })
+  }
+  return { success: true }
+}
+
+export async function skipComfortRating(id) {
+  const entry = find(id)
+  if (!entry) return { success: false }
+  const updatedEval = {
+    ...entry.evaluation,
+    comfortSkipped: true,
+    comfortSubmitted: false,
+    comfortSubmittedAt: new Date().toISOString(),
+    pendingSync: entry.status === 'upload_pending',
+  }
+  await persist({ ...entry, evaluation: updatedEval })
+  if (entry.status === 'feedback_pending') {
+    void submitTripEvaluation(id, entry.feedbackToken, { comfortSkipped: true }).then(res => {
+      if (!res.success) {
+        const current = find(id)
+        if (current?.evaluation) void persist({ ...current, evaluation: { ...current.evaluation, pendingSync: true } })
+      }
+    })
+  }
+  return { success: true }
+}
+
+export async function submitScoreAgreement(id, agreement) {
+  const entry = find(id)
+  if (!entry) return { success: false }
+  const valid = ['yes', 'partially', 'no', 'not_sure'].includes(agreement)
+  if (!valid) return { success: false, error: { message: 'Invalid score agreement choice.' } }
+  const updatedEval = {
+    ...entry.evaluation,
+    scoreAgreement: agreement,
+    agreementSubmitted: true,
+    agreementSkipped: false,
+    agreementSubmittedAt: new Date().toISOString(),
+    pendingSync: entry.status === 'upload_pending',
+  }
+  await persist({ ...entry, evaluation: updatedEval })
+  if (entry.status === 'feedback_pending') {
+    void submitTripEvaluation(id, entry.feedbackToken, { scoreAgreement: agreement }).then(res => {
+      if (!res.success) {
+        const current = find(id)
+        if (current?.evaluation) void persist({ ...current, evaluation: { ...current.evaluation, pendingSync: true } })
+      }
+    })
+  }
+  return { success: true }
+}
+
+export async function skipScoreAgreement(id) {
+  const entry = find(id)
+  if (!entry) return { success: false }
+  const updatedEval = {
+    ...entry.evaluation,
+    scoreAgreementSkipped: true,
+    agreementSubmitted: false,
+    agreementSkipped: true,
+    agreementSubmittedAt: new Date().toISOString(),
+    pendingSync: entry.status === 'upload_pending',
+  }
+  await persist({ ...entry, evaluation: updatedEval })
+  if (entry.status === 'feedback_pending') {
+    void submitTripEvaluation(id, entry.feedbackToken, { scoreAgreementSkipped: true }).then(res => {
+      if (!res.success) {
+        const current = find(id)
+        if (current?.evaluation) void persist({ ...current, evaluation: { ...current.evaluation, pendingSync: true } })
+      }
+    })
+  }
+  return { success: true }
+}
+

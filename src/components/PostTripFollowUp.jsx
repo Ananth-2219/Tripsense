@@ -1,11 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import TripQuestionnaire from './TripQuestionnaire.jsx'
 import TripScore from './TripScore.jsx'
+import IndependentComfortRating from './IndependentComfortRating.jsx'
 import { tripTime } from '../lib/tripTime.js'
 import {
   subscribeFollowUps, getFollowUpSnapshot, initializeFollowUps, retryTripUpload,
   updateFeedbackDraft, deferFeedback, skipFeedback, sendFeedback,
   refreshScore, retryAnalysis, retryFinalization,
+  submitComfortRating, skipComfortRating, submitScoreAgreement, skipScoreAgreement,
 } from '../lib/followUps.js'
 
 export default function PostTripFollowUp({ paused = false }) {
@@ -44,6 +46,10 @@ export default function PostTripFollowUp({ paused = false }) {
         .sort((a, b) => b.endedAt.localeCompare(a.endedAt)).map(entry => <TripScore key={entry.id} entry={entry}
           busy={busyIds.includes(entry.id)} onRetry={id => { void retryAnalysis(id) }}
           onFinalize={id => { void retryFinalization(id) }}
+          onComfortRating={(id, rating) => { void submitComfortRating(id, rating) }}
+          onSkipComfort={id => { void skipComfortRating(id) }}
+          onScoreAgreement={(id, agreement) => { void submitScoreAgreement(id, agreement) }}
+          onSkipAgreement={id => { void skipScoreAgreement(id) }}
           onFeedback={entries.some(e => e.id === entry.id && !e.feedbackComplete) ? id => {
             void deferFeedback(id, false)
             document.getElementById('questionnaire-title')?.focus()
@@ -53,6 +59,16 @@ export default function PostTripFollowUp({ paused = false }) {
         <section key={entry.id} aria-label={`Unsent trip from ${tripTime(entry.endedAt)}`} className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <h2 className="font-semibold">Trip still needs saving</h2>
           <p className="mt-2 text-sm leading-6">Trip ending {tripTime(entry.endedAt)}. Your recording is kept on this browser when device storage is available. The questionnaire opens after saving.</p>
+          {entry.evaluation && !entry.evaluation.comfortSubmitted && !entry.evaluation.comfortSkipped && (
+            <div className="mt-3">
+              <IndependentComfortRating
+                tripId={entry.id}
+                onSave={rating => { void submitComfortRating(entry.id, rating) }}
+                onSkip={() => { void skipComfortRating(entry.id) }}
+                busy={busyIds.includes(entry.id)}
+              />
+            </div>
+          )}
           <button type="button" disabled={busyIds.includes(entry.id)} onClick={async () => {
             const result = await retryTripUpload(entry.id)
             setMessage(result.success ? 'Trip saved.' : result.error?.message ?? 'Could not save the trip. Please retry.')
