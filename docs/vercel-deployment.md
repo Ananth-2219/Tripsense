@@ -30,6 +30,8 @@ This document describes the unified single-project Vercel deployment for TripSen
    * Pins Python `3.12`.
 5. **`.vercelignore`**:
    * Excludes virtual environments (`.venv*`), offline analysis datasets (`analysis/`), test files (`tests/`, `scripts/`), and credentials from the serverless function bundle to stay well below Vercel's 250 MB uncompressed limit.
+6. **`.gitattributes`**:
+   * Enforces `text eol=crlf` on `trip_scoring/policies/*.json` and `trip_scoring/policies/*.sha256` so that Git preserves the exact validated byte sequences and cryptographic SHA-256 seals across Windows, Linux, and Vercel environments without line-ending corruption.
 
 ---
 

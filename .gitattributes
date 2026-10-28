@@ -1,0 +1,11 @@
+# Auto-detect text files and normalize line endings to LF by default
+* text=auto
+
+# Frozen scoring policies must preserve exact CRLF byte sequences matching validated SHA-256 seals
+trip_scoring/policies/*.json text eol=crlf
+trip_scoring/policies/*.sha256 text eol=crlf
+trip_scoring/policies/*.json text eol=crlf
+analysis/** text eol=crlf
+
+# Sealed application configuration
+vite.config.js text eol=crlf
